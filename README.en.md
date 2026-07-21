@@ -23,8 +23,28 @@ Unlike legacy Windows packages, this project deliberately avoids:
 Requirements: 64-bit Windows 10/11 and PowerShell 5.1 or later.
 
 1. Download `qq-silk-windows-x64.zip` from [Releases](https://github.com/nekomiaoNyan/qq-silk-voice-exporter/releases/latest). Regular users do not need a compiler.
-2. Extract the archive, open PowerShell, and enter the extracted directory.
-3. Export all QQ voice messages automatically found for the current month:
+2. Extract every file and double-click `Start-QQSilkConverter.cmd`.
+3. Click **Add files**, or drag files/folders into the window. Choose the output directory and options, then click **Convert**.
+
+The graphical interface supports:
+
+- selecting multiple files or adding an entire folder;
+- WAV or MP3 output;
+- 8, 12, 16, 24, 32, 44.1, and 48 kHz sample rates (24 kHz is the recommended default);
+- choosing the output directory, overwrite behavior, MP3 quality, and the `ffmpeg.exe` needed for MP3;
+- progress reporting, cancellation, and a local activity log.
+
+Changing the output sample rate cannot restore quality that was not present in the source. MP3 still requires FFmpeg from a source you trust.
+
+If the launcher cannot start, run this command from the extracted directory:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -STA -File .\QQ-Silk-Converter-GUI.ps1
+```
+
+### Command-line batch export
+
+To automatically export the current month's QQ voice messages without selecting individual files, use the original script:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Convert-QQVoice.ps1
@@ -36,7 +56,8 @@ By default, files are written to `Documents\QQ Voice Export\<current month>`. So
 .\Convert-QQVoice.ps1 `
   -InputPath 'C:\Users\YourName\Documents\Tencent Files\QQ-number\nt_qq\nt_data\Ptt\YYYY-MM\Ori' `
   -OutputPath 'D:\QQ Voice Backup' `
-  -Format wav
+  -Format wav `
+  -SampleRate 24000
 ```
 
 Existing destination files are skipped by default. Add `-Force` to overwrite them, or `-WhatIf` to preview the operation.
