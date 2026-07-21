@@ -36,7 +36,7 @@ jobs:
           New-Item -ItemType Directory -Path dist/package | Out-Null
           Copy-Item build/Release/qq-silk.exe dist/package/
           Copy-Item scripts/Convert-QQVoice.ps1 dist/package/
-          Copy-Item README.md,THIRD_PARTY_NOTICES.md,LICENSE dist/package/
+          Copy-Item README.md,README.en.md,THIRD_PARTY_NOTICES.md,LICENSE dist/package/
           Copy-Item LICENSES dist/package/LICENSES -Recurse
           $files = Get-ChildItem dist/package -File -Recurse | Sort-Object FullName
           $lines = foreach ($file in $files) {
