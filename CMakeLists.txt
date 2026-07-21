@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 
 cmake_policy(SET CMP0091 NEW)
 
-project(qq_silk_exporter VERSION 1.2.0 LANGUAGES C)
+project(qq_silk_exporter VERSION 1.2.1 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -147,7 +147,6 @@ install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/Export-WeChatVoice.ps1"
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/QQ-Silk-Converter-GUI.ps1"
     "${CMAKE_CURRENT_SOURCE_DIR}/Start-VoiceConverter.cmd"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Start-QQSilkConverter.cmd"
     "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
     DESTINATION .

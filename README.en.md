@@ -30,8 +30,8 @@ Unlike legacy Windows packages, this project deliberately avoids:
 Requirements: 64-bit Windows 10/11 and PowerShell 5.1 or later.
 
 1. Download `qq-silk-windows-x64.zip` from [Releases](https://github.com/nekomiaoNyan/qq-silk-voice-exporter/releases/latest). Regular users do not need a compiler.
-2. Extract every file and double-click `Start-VoiceConverter.cmd` (the previous `Start-QQSilkConverter.cmd` remains compatible).
-3. For QQ, click **Add files** or drag files/folders into the window. For WeChat, click **WeChat DB** and select a decrypted `media_*.db` copy. Choose the options, then click **Convert**.
+2. Extract every file and double-click the single launcher, `Start-VoiceConverter.cmd`.
+3. For QQ, click **Files** or drag files/folders into the window. For WeChat, click **WeChat DB** and select a decrypted `media_*.db` copy. Choose the options, then click **Convert**.
 
 The graphical interface supports:
 
