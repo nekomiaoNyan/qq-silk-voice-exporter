@@ -9,6 +9,12 @@ param(
     [ValidateSet('wav', 'mp3')]
     [string] $Format = 'wav',
 
+    [ValidateSet(8000, 12000, 16000, 24000, 32000, 44100, 48000)]
+    [int] $SampleRate = 24000,
+
+    [ValidateRange(0, 9)]
+    [int] $Mp3Quality = 2,
+
     [string] $DecoderPath,
 
     [string] $FfmpegPath,
@@ -154,6 +160,13 @@ foreach ($file in $files) {
     }
 
     $destination = Join-Path $outputDirectory ($file.BaseName + '.' + $Format)
+    $sourceFullPath = [IO.Path]::GetFullPath($file.FullName)
+    $destinationFullPath = [IO.Path]::GetFullPath($destination)
+    if ($sourceFullPath.Equals($destinationFullPath, [StringComparison]::OrdinalIgnoreCase)) {
+        Write-Error -ErrorAction Continue "Refusing to replace the source file with converted output: $($file.FullName)"
+        $failed++
+        continue
+    }
     if ((Test-Path -LiteralPath $destination -PathType Leaf) -and -not $Force) {
         Write-Warning "Destination already exists; skipping (use -Force to overwrite): $destination"
         $skipped++
@@ -168,13 +181,13 @@ foreach ($file in $files) {
     $temporaryMp3 = Join-Path $outputDirectory ($temporaryStem + '.mp3')
 
     try {
-        & $decoder $file.FullName $temporaryWave --sample-rate 24000
+        & $decoder $file.FullName $temporaryWave --sample-rate $SampleRate
         if ($LASTEXITCODE -ne 0) {
             throw "qq-silk.exe exited with code $LASTEXITCODE"
         }
 
         if ($Format -eq 'mp3') {
-            & $ffmpeg -nostdin -hide_banner -loglevel error -y -i $temporaryWave -map_metadata -1 -vn -codec:a libmp3lame -q:a 2 $temporaryMp3
+            & $ffmpeg -nostdin -hide_banner -loglevel error -y -i $temporaryWave -map_metadata -1 -vn -codec:a libmp3lame -q:a $Mp3Quality $temporaryMp3
             if ($LASTEXITCODE -ne 0) {
                 throw "ffmpeg.exe exited with code $LASTEXITCODE"
             }
