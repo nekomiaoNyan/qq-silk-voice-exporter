@@ -30,7 +30,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Convert-QQVoice.ps1
 
 ```powershell
 .\Convert-QQVoice.ps1 `
-  -InputPath 'C:\Users\你的用户名\Documents\Tencent Files\QQ号\nt_qq\nt_data\Ptt\2026-07\Ori' `
+  -InputPath 'C:\Users\你的用户名\Documents\Tencent Files\QQ号\nt_qq\nt_data\Ptt\YYYY-MM\Ori' `
   -OutputPath 'D:\QQ语音备份' `
   -Format wav
 ```
