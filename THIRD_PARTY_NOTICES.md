@@ -13,3 +13,7 @@ The upstream repository is distributed under the MIT License. A copy is in `LICE
 Individual SILK SDK files carry a separate copyright and redistribution notice from Skype Limited. A copy is in `LICENSES/SILK-SDK.txt`. In particular, that notice states that no express or implied patent license is granted. The original notices are retained in the vendored source files.
 
 No upstream Windows executable, AutoIt source, shell converter, FFmpeg binary, or UPX-packed artifact is included in this repository.
+
+## Windows system SQLite
+
+`wechat-voice.exe` dynamically loads the `winsqlite3.dll` component supplied by Windows. The repository and release packages do not bundle a SQLite DLL, SQLCipher binary, or database decryption tool.

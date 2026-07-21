@@ -19,3 +19,12 @@
 *.slk
 *.silk
 *.aud
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+all_keys.json
+decrypted/
+wechat-data/
+raw/
