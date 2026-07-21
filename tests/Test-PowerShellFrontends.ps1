@@ -1,7 +1,10 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [string] $DecoderPath
+    [string] $DecoderPath,
+
+    [Parameter(Mandatory)]
+    [string] $WeChatExtractorPath
 )
 
 Set-StrictMode -Version 3.0
@@ -10,6 +13,7 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $scripts = @(
     (Join-Path $root 'scripts\Convert-QQVoice.ps1'),
+    (Join-Path $root 'scripts\Export-WeChatVoice.ps1'),
     (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1')
 )
 
@@ -23,8 +27,15 @@ foreach ($scriptPath in $scripts) {
     }
 }
 
-$selfTest = & (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') -SelfTest -DecoderPath $DecoderPath
-if (-not $selfTest.GuiAssembliesLoaded -or -not $selfTest.BatchScriptFound -or -not $selfTest.DecoderFound) {
+$selfTest = & (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') `
+    -SelfTest `
+    -DecoderPath $DecoderPath `
+    -WeChatExtractorPath $WeChatExtractorPath
+if (-not $selfTest.GuiAssembliesLoaded -or
+    -not $selfTest.BatchScriptFound -or
+    -not $selfTest.WeChatScriptFound -or
+    -not $selfTest.DecoderFound -or
+    -not $selfTest.WeChatExtractorFound) {
     throw 'GUI self-test failed.'
 }
 if ($selfTest.SampleRates -ne '8000,12000,16000,24000,32000,44100,48000') {
@@ -37,6 +48,10 @@ if ($selfTest.Mp3Qualities -ne '2,4,6') {
 $launcher = Get-Content -LiteralPath (Join-Path $root 'Start-QQSilkConverter.cmd') -Raw
 if ($launcher -notmatch 'QQ-Silk-Converter-GUI\.ps1') {
     throw 'GUI launcher does not reference the GUI script.'
+}
+$generalLauncher = Get-Content -LiteralPath (Join-Path $root 'Start-VoiceConverter.cmd') -Raw
+if ($generalLauncher -notmatch 'QQ-Silk-Converter-GUI\.ps1') {
+    throw 'General GUI launcher does not reference the GUI script.'
 }
 
 $testDirectory = Join-Path ([IO.Path]::GetTempPath()) ('qq-silk-frontend-test-' + [Guid]::NewGuid().ToString('N'))
@@ -66,18 +81,22 @@ try {
     $env:Path = "$pathFfmpegDirectory;$originalPath"
     $pathSelfTest = & (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') `
         -SelfTest `
-        -DecoderPath $DecoderPath
+        -DecoderPath $DecoderPath `
+        -WeChatExtractorPath $WeChatExtractorPath
     if (-not $pathSelfTest.FfmpegFound -or $pathSelfTest.FfmpegPath -ne $pathFfmpeg) {
         throw 'GUI did not automatically detect ffmpeg.exe on PATH.'
     }
     New-Item -ItemType Directory -Path $frontendPackage | Out-Null
     Copy-Item (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') $frontendPackage
     Copy-Item (Join-Path $root 'scripts\Convert-QQVoice.ps1') $frontendPackage
+    Copy-Item (Join-Path $root 'scripts\Export-WeChatVoice.ps1') $frontendPackage
+    Copy-Item $WeChatExtractorPath (Join-Path $frontendPackage 'wechat-voice.exe')
     $localFfmpeg = Join-Path $frontendPackage 'ffmpeg.exe'
     [IO.File]::WriteAllBytes($localFfmpeg, [byte[]](0x4d, 0x5a))
     $packagedSelfTest = & (Join-Path $frontendPackage 'QQ-Silk-Converter-GUI.ps1') `
         -SelfTest `
-        -DecoderPath $DecoderPath
+        -DecoderPath $DecoderPath `
+        -WeChatExtractorPath (Join-Path $frontendPackage 'wechat-voice.exe')
     if (-not $packagedSelfTest.FfmpegFound -or $packagedSelfTest.FfmpegPath -ne $localFfmpeg) {
         throw 'GUI did not automatically detect ffmpeg.exe next to the converter.'
     }

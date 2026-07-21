@@ -1,8 +1,8 @@
-# QQ SILK Voice Exporter
+# QQ / WeChat SILK Voice Exporter
 
 English | [简体中文](README.md)
 
-Batch-export SILK V3 voice messages from the `nt_qq\nt_data\Ptt` directory used by recent Windows versions of QQ. This project contains auditable source code and a reproducible build workflow only. It does not include AutoIt, UPX, installers, self-extracting archives, telemetry, or network access.
+Import and convert QQ SILK V3 voice messages on Windows, and read voice data from a **decrypted copy of a WeChat 4.x media database**. This project contains auditable source code and a reproducible build workflow only. It does not include AutoIt, UPX, installers, self-extracting archives, telemetry, or network access.
 
 ## Why this project exists
 
@@ -14,14 +14,15 @@ The legacy Windows package provided by the widely used [`silk-v3-decoder`](https
 
 ## Design
 
-Files in QQ's storage commonly use the `.amr` extension even when their actual content is SILK data with Tencent's `0x02` prefix followed by `#!SILK_V3`. The native `qq-silk.exe` program only decodes these files to 24 kHz, 16-bit, mono WAV. A readable PowerShell script handles discovery and batch conversion.
+Files in QQ's storage commonly use the `.amr` extension even when their actual content is SILK data with Tencent's `0x02` prefix followed by `#!SILK_V3`. The native `qq-silk.exe` program decodes these files to 24 kHz, 16-bit, mono WAV. `wechat-voice.exe` uses the Windows system `winsqlite3.dll` to read `VoiceInfo.voice_data` from a user-selected, decrypted `media_*.db` copy. Readable PowerShell scripts provide the GUI, filtering, and batch conversion.
 
 Unlike legacy Windows packages, this project deliberately avoids:
 
 - AutoIt GUIs and executable packers;
 - UPX, obfuscation, self-extractors, and silent downloads;
 - bundling FFmpeg or other third-party prebuilt executables;
-- reading, deleting, or uploading the original QQ voice messages;
+- deleting or uploading any QQ or WeChat chat content;
+- scanning `Weixin.exe` process memory, extracting database keys, or bypassing WeChat database encryption;
 - fixed-size path buffers and unchecked SILK packet lengths.
 
 ## Quick start
@@ -29,12 +30,13 @@ Unlike legacy Windows packages, this project deliberately avoids:
 Requirements: 64-bit Windows 10/11 and PowerShell 5.1 or later.
 
 1. Download `qq-silk-windows-x64.zip` from [Releases](https://github.com/nekomiaoNyan/qq-silk-voice-exporter/releases/latest). Regular users do not need a compiler.
-2. Extract every file and double-click `Start-QQSilkConverter.cmd`.
-3. Click **Add files**, or drag files/folders into the window. Choose the output directory and options, then click **Convert**.
+2. Extract every file and double-click `Start-VoiceConverter.cmd` (the previous `Start-QQSilkConverter.cmd` remains compatible).
+3. For QQ, click **Add files** or drag files/folders into the window. For WeChat, click **WeChat DB** and select a decrypted `media_*.db` copy. Choose the options, then click **Convert**.
 
 The graphical interface supports:
 
 - selecting multiple files or adding an entire folder;
+- importing voices from a decrypted WeChat media database with date and count filters;
 - WAV or MP3 output;
 - 8, 12, 16, 24, 32, 44.1, and 48 kHz sample rates (24 kHz is the recommended default);
 - choosing the output directory, overwrite behavior, MP3 quality, and the `ffmpeg.exe` needed for MP3;
@@ -47,6 +49,51 @@ Documents\Tencent Files\<QQ-number>\nt_qq\nt_data\Ptt\YYYY-MM\Ori
 ```
 
 In the file picker, sort or filter by **Date modified**. If the target file is missing, play that voice message once in QQ, then refresh or reopen the folder.
+
+### WeChat support boundary
+
+WeChat 3.x and some older clients store voice messages as standalone `.aud` files, commonly under:
+
+```text
+Documents\WeChat Files\<account>\FileStorage\MsgAttach\<conversation>\Audio\YYYY-MM
+```
+
+Drag these `.aud` files into the window or add their folder; they use the same local SILK decoder as QQ files.
+
+#### WeChat 4.x
+
+Recent WeChat versions commonly store account data under:
+
+```text
+Documents\xwechat_files\<account>\db_storage\message\media_*.db
+```
+
+WeChat 4.x voice payloads are records in the encrypted database's `VoiceInfo` table, not standalone files. This project currently supports a **decrypted SQLite database copy** only:
+
+1. Create a decrypted copy using a local, auditable method you trust. Never add the database, keys, or chat samples to this repository.
+2. Click **WeChat DB** and select the copy.
+3. Optionally filter by date and maximum record count. Raw files use numeric names and never include contact or group names.
+4. Choose WAV/MP3 output and click **Convert**.
+
+To preserve the project's low-false-positive, auditable design, release packages do not scan `Weixin.exe` memory or obtain/store database keys. Those techniques are antivirus-sensitive and version-dependent. Selecting an encrypted official database produces a clear error and never modifies it.
+
+Command-line extraction:
+
+```powershell
+.\Export-WeChatVoice.ps1 `
+  -DatabasePath 'D:\WeChat database copy\media_0.db' `
+  -OutputPath 'D:\WeChat Voice\Raw' `
+  -StartTime '2026-07-01' `
+  -EndTime '2026-07-31 23:59:59' `
+  -PassThru
+```
+
+The native checker/extractor can also be used directly:
+
+```powershell
+.\wechat-voice.exe check 'D:\WeChat database copy\media_0.db'
+.\wechat-voice.exe export 'D:\WeChat database copy\media_0.db' 'D:\WeChat Voice\Raw' --limit 1000
+```
 
 Changing the output sample rate cannot restore quality that was not present in the source. MP3 still requires FFmpeg from a source you trust.
 

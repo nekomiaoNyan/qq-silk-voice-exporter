@@ -27,7 +27,12 @@ if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
 & ctest --test-dir $BuildDirectory -C $Configuration --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "Tests failed with exit code $LASTEXITCODE" }
 
-$executable = Join-Path $BuildDirectory "$Configuration\qq-silk.exe"
-$hash = Get-FileHash -LiteralPath $executable -Algorithm SHA256
-Write-Host "Build complete: $executable"
-Write-Host "SHA-256: $($hash.Hash)"
+$executables = @(
+    (Join-Path $BuildDirectory "$Configuration\qq-silk.exe"),
+    (Join-Path $BuildDirectory "$Configuration\wechat-voice.exe")
+)
+foreach ($executable in $executables) {
+    $hash = Get-FileHash -LiteralPath $executable -Algorithm SHA256
+    Write-Host "Build complete: $executable"
+    Write-Host "SHA-256: $($hash.Hash)"
+}

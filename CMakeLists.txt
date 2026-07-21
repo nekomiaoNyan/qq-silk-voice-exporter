@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 
 cmake_policy(SET CMP0091 NEW)
 
-project(qq_silk_exporter VERSION 0.1.0 LANGUAGES C)
+project(qq_silk_exporter VERSION 1.2.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -82,11 +82,24 @@ target_include_directories(silk_sdk
 add_executable(qq-silk src/qq_silk.c)
 target_link_libraries(qq-silk PRIVATE silk_sdk)
 
+if(WIN32)
+    add_executable(wechat-voice src/wechat_voice.c)
+endif()
+
 if(MSVC)
     target_compile_definitions(silk_sdk PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_compile_options(silk_sdk PRIVATE /O2 /GS /guard:cf)
     target_compile_options(qq-silk PRIVATE /W4 /O2 /GS /guard:cf /sdl /utf-8)
+    target_compile_options(wechat-voice PRIVATE /W4 /O2 /GS /guard:cf /sdl /utf-8)
     target_link_options(qq-silk PRIVATE
+        /Brepro
+        /CETCOMPAT
+        /DYNAMICBASE
+        /guard:cf
+        /HIGHENTROPYVA
+        /NXCOMPAT
+    )
+    target_link_options(wechat-voice PRIVATE
         /Brepro
         /CETCOMPAT
         /DYNAMICBASE
@@ -97,7 +110,9 @@ if(MSVC)
 elseif(MINGW)
     target_compile_options(silk_sdk PRIVATE -O2 -fstack-protector-strong)
     target_compile_options(qq-silk PRIVATE -Wall -Wextra -Wpedantic -O2 -fstack-protector-strong)
+    target_compile_options(wechat-voice PRIVATE -Wall -Wextra -Wpedantic -O2 -fstack-protector-strong)
     target_link_options(qq-silk PRIVATE -municode -Wl,--dynamicbase,--high-entropy-va,--nxcompat)
+    target_link_options(wechat-voice PRIVATE -municode -Wl,--dynamicbase,--high-entropy-va,--nxcompat)
 else()
     target_compile_options(silk_sdk PRIVATE -O2 -fstack-protector-strong)
     target_compile_options(qq-silk PRIVATE -Wall -Wextra -Wpedantic -O2 -fstack-protector-strong)
@@ -113,13 +128,26 @@ if(QQ_SILK_BUILD_TESTS)
                     -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-QQSilk.ps1"
                     -DecoderPath "$<TARGET_FILE:qq-silk>"
             )
+            add_test(
+                NAME wechat_voice_database
+                COMMAND powershell -NoLogo -NoProfile -ExecutionPolicy Bypass
+                    -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-WeChatVoice.ps1"
+                    -ExtractorPath "$<TARGET_FILE:wechat-voice>"
+            )
         endif()
     endif()
 endif()
 
 install(TARGETS qq-silk RUNTIME DESTINATION .)
+if(WIN32)
+    install(TARGETS wechat-voice RUNTIME DESTINATION .)
+endif()
 install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/Convert-QQVoice.ps1"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/Export-WeChatVoice.ps1"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/QQ-Silk-Converter-GUI.ps1"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Start-VoiceConverter.cmd"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Start-QQSilkConverter.cmd"
     "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
     DESTINATION .

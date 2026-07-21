@@ -32,15 +32,16 @@ jobs:
 
       - name: Test PowerShell front ends
         shell: pwsh
-        run: .\tests\Test-PowerShellFrontends.ps1 -DecoderPath .\build\Release\qq-silk.exe
+        run: .\tests\Test-PowerShellFrontends.ps1 -DecoderPath .\build\Release\qq-silk.exe -WeChatExtractorPath .\build\Release\wechat-voice.exe
 
       - name: Package auditable binary
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path dist/package | Out-Null
           Copy-Item build/Release/qq-silk.exe dist/package/
-          Copy-Item scripts/Convert-QQVoice.ps1,scripts/QQ-Silk-Converter-GUI.ps1 dist/package/
-          Copy-Item Start-QQSilkConverter.cmd dist/package/
+          Copy-Item build/Release/wechat-voice.exe dist/package/
+          Copy-Item scripts/Convert-QQVoice.ps1,scripts/Export-WeChatVoice.ps1,scripts/QQ-Silk-Converter-GUI.ps1 dist/package/
+          Copy-Item Start-VoiceConverter.cmd,Start-QQSilkConverter.cmd dist/package/
           Copy-Item README.md,README.en.md,THIRD_PARTY_NOTICES.md,LICENSE dist/package/
           Copy-Item LICENSES dist/package/LICENSES -Recurse
           $files = Get-ChildItem dist/package -File -Recurse | Sort-Object FullName

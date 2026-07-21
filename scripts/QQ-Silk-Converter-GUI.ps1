@@ -2,6 +2,7 @@
 param(
     [switch] $SelfTest,
     [string] $DecoderPath,
+    [string] $WeChatExtractorPath,
     [string] $RenderPath
 )
 
@@ -49,6 +50,27 @@ function Resolve-GuiDecoder {
         }
     }
     throw 'qq-silk.exe was not found next to the GUI script.'
+}
+
+function Resolve-GuiWeChatExtractor {
+    param([string] $RequestedPath)
+
+    if ($RequestedPath) {
+        return (Resolve-Path -LiteralPath $RequestedPath -ErrorAction Stop).Path
+    }
+
+    $candidates = @(
+        (Join-Path $PSScriptRoot 'wechat-voice.exe'),
+        (Join-Path $PSScriptRoot '..\wechat-voice.exe'),
+        (Join-Path $PSScriptRoot '..\build\Release\wechat-voice.exe'),
+        (Join-Path $PSScriptRoot '..\build\wechat-voice.exe')
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+    throw 'wechat-voice.exe was not found next to the GUI script.'
 }
 
 function Resolve-GuiFfmpeg {
@@ -106,7 +128,9 @@ function ConvertTo-NativeArgument {
 }
 
 $script:batchScript = Resolve-CompanionFile -Name 'Convert-QQVoice.ps1'
+$script:weChatExportScript = Resolve-CompanionFile -Name 'Export-WeChatVoice.ps1'
 $script:decoder = Resolve-GuiDecoder -RequestedPath $DecoderPath
+$script:weChatExtractor = Resolve-GuiWeChatExtractor -RequestedPath $WeChatExtractorPath
 $script:defaultFfmpeg = Resolve-GuiFfmpeg
 $script:supportedExtensions = @('.amr', '.slk', '.silk', '.aud')
 $script:supportedRates = @(8000, 12000, 16000, 24000, 32000, 44100, 48000)
@@ -115,7 +139,9 @@ if ($SelfTest) {
     [PSCustomObject]@{
         GuiAssembliesLoaded = $true
         BatchScriptFound = Test-Path -LiteralPath $script:batchScript -PathType Leaf
+        WeChatScriptFound = Test-Path -LiteralPath $script:weChatExportScript -PathType Leaf
         DecoderFound = Test-Path -LiteralPath $script:decoder -PathType Leaf
+        WeChatExtractorFound = Test-Path -LiteralPath $script:weChatExtractor -PathType Leaf
         SampleRates = $script:supportedRates -join ','
         Mp3Qualities = '2,4,6'
         FfmpegFound = [bool]$script:defaultFfmpeg
@@ -127,7 +153,7 @@ if ($SelfTest) {
 [Windows.Forms.Application]::EnableVisualStyles()
 
 $form = New-Object Windows.Forms.Form
-$form.Text = 'QQ SILK 语音转换器 / Voice Converter'
+$form.Text = 'QQ / 微信 SILK 语音转换器 / Voice Converter'
 $form.StartPosition = 'CenterScreen'
 $form.ClientSize = New-Object Drawing.Size(900, 820)
 $form.MinimumSize = New-Object Drawing.Size(800, 740)
@@ -137,7 +163,7 @@ $form.AllowDrop = $true
 $form.AutoScaleMode = 'Dpi'
 
 $titleLabel = New-Object Windows.Forms.Label
-$titleLabel.Text = 'QQ SILK 语音转换器'
+$titleLabel.Text = 'QQ / 微信 SILK 语音转换器'
 $titleLabel.Font = New-Object Drawing.Font('Microsoft YaHei UI', 17, [Drawing.FontStyle]::Bold)
 $titleLabel.ForeColor = [Drawing.Color]::FromArgb(32, 42, 56)
 $titleLabel.Location = New-Object Drawing.Point(18, 14)
@@ -145,7 +171,7 @@ $titleLabel.AutoSize = $true
 $form.Controls.Add($titleLabel)
 
 $subtitleLabel = New-Object Windows.Forms.Label
-$subtitleLabel.Text = '选择或拖入 QQ 语音文件，设置参数后直接转换 / Select or drop files, choose options, and convert.'
+$subtitleLabel.Text = '导入 QQ 语音文件或已解密的微信媒体库，然后直接转换 / Import QQ files or a decrypted WeChat media database.'
 $subtitleLabel.ForeColor = [Drawing.Color]::FromArgb(90, 100, 115)
 $subtitleLabel.Location = New-Object Drawing.Point(20, 51)
 $subtitleLabel.AutoSize = $true
@@ -161,31 +187,37 @@ $form.Controls.Add($inputGroup)
 $addFilesButton = New-Object Windows.Forms.Button
 $addFilesButton.Text = '添加文件 / Add files'
 $addFilesButton.Location = New-Object Drawing.Point(15, 28)
-$addFilesButton.Size = New-Object Drawing.Size(135, 32)
+$addFilesButton.Size = New-Object Drawing.Size(120, 32)
 $inputGroup.Controls.Add($addFilesButton)
 
 $addFolderButton = New-Object Windows.Forms.Button
 $addFolderButton.Text = '添加文件夹 / Folder'
-$addFolderButton.Location = New-Object Drawing.Point(158, 28)
-$addFolderButton.Size = New-Object Drawing.Size(145, 32)
+$addFolderButton.Location = New-Object Drawing.Point(142, 28)
+$addFolderButton.Size = New-Object Drawing.Size(120, 32)
 $inputGroup.Controls.Add($addFolderButton)
+
+$weChatDatabaseButton = New-Object Windows.Forms.Button
+$weChatDatabaseButton.Text = '导入微信 DB / WeChat DB'
+$weChatDatabaseButton.Location = New-Object Drawing.Point(269, 28)
+$weChatDatabaseButton.Size = New-Object Drawing.Size(170, 32)
+$inputGroup.Controls.Add($weChatDatabaseButton)
 
 $removeButton = New-Object Windows.Forms.Button
 $removeButton.Text = '移除选中 / Remove'
-$removeButton.Location = New-Object Drawing.Point(311, 28)
-$removeButton.Size = New-Object Drawing.Size(135, 32)
+$removeButton.Location = New-Object Drawing.Point(446, 28)
+$removeButton.Size = New-Object Drawing.Size(125, 32)
 $inputGroup.Controls.Add($removeButton)
 
 $clearButton = New-Object Windows.Forms.Button
 $clearButton.Text = '清空 / Clear'
-$clearButton.Location = New-Object Drawing.Point(454, 28)
-$clearButton.Size = New-Object Drawing.Size(100, 32)
+$clearButton.Location = New-Object Drawing.Point(578, 28)
+$clearButton.Size = New-Object Drawing.Size(90, 32)
 $inputGroup.Controls.Add($clearButton)
 
 $recurseCheck = New-Object Windows.Forms.CheckBox
-$recurseCheck.Text = '文件夹包含子目录 / Include subfolders'
-$recurseCheck.Location = New-Object Drawing.Point(572, 34)
-$recurseCheck.Size = New-Object Drawing.Size(270, 24)
+$recurseCheck.Text = '含子目录 / Recurse'
+$recurseCheck.Location = New-Object Drawing.Point(680, 34)
+$recurseCheck.Size = New-Object Drawing.Size(170, 24)
 $inputGroup.Controls.Add($recurseCheck)
 
 $fileList = New-Object Windows.Forms.ListView
@@ -214,14 +246,14 @@ $dropHint.AutoSize = $true
 $inputGroup.Controls.Add($dropHint)
 
 $locationHint = New-Object Windows.Forms.Label
-$locationHint.Text = 'QQ 语音位置 / Location: 文档\Tencent Files\<QQ号>\nt_qq\nt_data\Ptt\YYYY-MM\Ori'
+$locationHint.Text = 'QQ: 文档\Tencent Files\<QQ号>\nt_qq\nt_data\Ptt\YYYY-MM\Ori'
 $locationHint.ForeColor = [Drawing.Color]::FromArgb(60, 90, 135)
 $locationHint.Location = New-Object Drawing.Point(17, 254)
 $locationHint.AutoSize = $true
 $inputGroup.Controls.Add($locationHint)
 
 $dateHint = New-Object Windows.Forms.Label
-$dateHint.Text = '提示：可按“修改日期”排序/筛选；找不到时先在 QQ 播放一次目标语音，再刷新文件夹。 / Sort by date; play it in QQ, then refresh.'
+$dateHint.Text = '微信 3.x：...\FileStorage\MsgAttach\...\Audio\YYYY-MM（.aud 直接添加）；4.x：导入已解密 media_*.db'
 $dateHint.ForeColor = [Drawing.Color]::FromArgb(95, 105, 120)
 $dateHint.Location = New-Object Drawing.Point(17, 277)
 $dateHint.AutoSize = $true
@@ -331,7 +363,7 @@ $overwriteCheck.Size = New-Object Drawing.Size(265, 25)
 $optionsGroup.Controls.Add($overwriteCheck)
 
 $optionHint = New-Object Windows.Forms.Label
-$optionHint.Text = 'FFmpeg 自动查找同目录/PATH；源文件不会被修改。 / Auto-detects local/PATH FFmpeg.'
+$optionHint.Text = 'FFmpeg：同目录/PATH 自动查找；源文件只读。 / Auto-detect; source read-only.'
 $optionHint.ForeColor = [Drawing.Color]::FromArgb(90, 100, 115)
 $optionHint.Location = New-Object Drawing.Point(420, 159)
 $optionHint.AutoSize = $true
@@ -440,8 +472,216 @@ function Add-GuiPath {
             Where-Object { $script:supportedExtensions -contains $_.Extension.ToLowerInvariant() } |
             ForEach-Object { Add-GuiFile -Path $_.FullName }
     }
+    elseif ([IO.Path]::GetExtension($Path).Equals('.db', [StringComparison]::OrdinalIgnoreCase)) {
+        Import-WeChatDatabase -DatabasePath $Path
+    }
     else {
         Add-GuiFile -Path $Path
+    }
+}
+
+function Show-WeChatImportDialog {
+    param([string] $DatabasePath)
+
+    $dialogForm = New-Object Windows.Forms.Form
+    $dialogForm.Text = '导入微信 4.x 语音 / Import WeChat voices'
+    $dialogForm.StartPosition = 'CenterParent'
+    $dialogForm.ClientSize = New-Object Drawing.Size(650, 330)
+    $dialogForm.FormBorderStyle = 'FixedDialog'
+    $dialogForm.MaximizeBox = $false
+    $dialogForm.MinimizeBox = $false
+    $dialogForm.Font = New-Object Drawing.Font('Microsoft YaHei UI', 9)
+
+    $databaseLabel = New-Object Windows.Forms.Label
+    $databaseLabel.Text = '数据库 / Database'
+    $databaseLabel.Location = New-Object Drawing.Point(18, 20)
+    $databaseLabel.AutoSize = $true
+    $dialogForm.Controls.Add($databaseLabel)
+
+    $databaseText = New-Object Windows.Forms.TextBox
+    $databaseText.Text = $DatabasePath
+    $databaseText.Location = New-Object Drawing.Point(145, 17)
+    $databaseText.Size = New-Object Drawing.Size(480, 25)
+    $databaseText.ReadOnly = $true
+    $dialogForm.Controls.Add($databaseText)
+
+    $dateCheck = New-Object Windows.Forms.CheckBox
+    $dateCheck.Text = '按日期筛选 / Filter by date'
+    $dateCheck.Location = New-Object Drawing.Point(20, 62)
+    $dateCheck.Size = New-Object Drawing.Size(225, 25)
+    $dateCheck.Checked = $true
+    $dialogForm.Controls.Add($dateCheck)
+
+    $startLabel = New-Object Windows.Forms.Label
+    $startLabel.Text = '从 / From'
+    $startLabel.Location = New-Object Drawing.Point(42, 101)
+    $startLabel.AutoSize = $true
+    $dialogForm.Controls.Add($startLabel)
+
+    $startPicker = New-Object Windows.Forms.DateTimePicker
+    $startPicker.Format = 'Custom'
+    $startPicker.CustomFormat = 'yyyy-MM-dd'
+    $startPicker.Location = New-Object Drawing.Point(145, 96)
+    $startPicker.Size = New-Object Drawing.Size(150, 26)
+    $startPicker.Value = (Get-Date).Date.AddDays(-30)
+    $dialogForm.Controls.Add($startPicker)
+
+    $endLabel = New-Object Windows.Forms.Label
+    $endLabel.Text = '到 / To'
+    $endLabel.Location = New-Object Drawing.Point(325, 101)
+    $endLabel.AutoSize = $true
+    $dialogForm.Controls.Add($endLabel)
+
+    $endPicker = New-Object Windows.Forms.DateTimePicker
+    $endPicker.Format = 'Custom'
+    $endPicker.CustomFormat = 'yyyy-MM-dd'
+    $endPicker.Location = New-Object Drawing.Point(405, 96)
+    $endPicker.Size = New-Object Drawing.Size(150, 26)
+    $endPicker.Value = (Get-Date).Date
+    $dialogForm.Controls.Add($endPicker)
+
+    $limitLabel = New-Object Windows.Forms.Label
+    $limitLabel.Text = '最多条数 / Limit'
+    $limitLabel.Location = New-Object Drawing.Point(20, 145)
+    $limitLabel.AutoSize = $true
+    $dialogForm.Controls.Add($limitLabel)
+
+    $limitControl = New-Object Windows.Forms.NumericUpDown
+    $limitControl.Location = New-Object Drawing.Point(145, 141)
+    $limitControl.Size = New-Object Drawing.Size(150, 26)
+    $limitControl.Minimum = 1
+    $limitControl.Maximum = 1000000
+    $limitControl.Value = 10000
+    $dialogForm.Controls.Add($limitControl)
+
+    $rawLabel = New-Object Windows.Forms.Label
+    $rawLabel.Text = 'SILK 临时导出 / Raw'
+    $rawLabel.Location = New-Object Drawing.Point(20, 188)
+    $rawLabel.AutoSize = $true
+    $dialogForm.Controls.Add($rawLabel)
+
+    $rawText = New-Object Windows.Forms.TextBox
+    $rawText.Text = Join-Path (Join-Path $documents 'WeChat Voice Export') 'Raw'
+    $rawText.Location = New-Object Drawing.Point(145, 184)
+    $rawText.Size = New-Object Drawing.Size(370, 25)
+    $dialogForm.Controls.Add($rawText)
+
+    $rawBrowseButton = New-Object Windows.Forms.Button
+    $rawBrowseButton.Text = '浏览 / Browse'
+    $rawBrowseButton.Location = New-Object Drawing.Point(523, 181)
+    $rawBrowseButton.Size = New-Object Drawing.Size(102, 30)
+    $dialogForm.Controls.Add($rawBrowseButton)
+
+    $noticeLabel = New-Object Windows.Forms.Label
+    $noticeLabel.Text = '仅支持已解密的 SQLite 副本。官方 media_*.db 通常是加密的；本项目不会读取微信进程内存、提取密钥或联网。'
+    $noticeLabel.ForeColor = [Drawing.Color]::FromArgb(125, 78, 25)
+    $noticeLabel.Location = New-Object Drawing.Point(20, 225)
+    $noticeLabel.Size = New-Object Drawing.Size(605, 42)
+    $dialogForm.Controls.Add($noticeLabel)
+
+    $okButton = New-Object Windows.Forms.Button
+    $okButton.Text = '导入 / Import'
+    $okButton.Location = New-Object Drawing.Point(405, 282)
+    $okButton.Size = New-Object Drawing.Size(105, 32)
+    $okButton.DialogResult = [Windows.Forms.DialogResult]::OK
+    $dialogForm.Controls.Add($okButton)
+
+    $closeButton = New-Object Windows.Forms.Button
+    $closeButton.Text = '取消 / Cancel'
+    $closeButton.Location = New-Object Drawing.Point(520, 282)
+    $closeButton.Size = New-Object Drawing.Size(105, 32)
+    $closeButton.DialogResult = [Windows.Forms.DialogResult]::Cancel
+    $dialogForm.Controls.Add($closeButton)
+
+    $dateCheck.Add_CheckedChanged({
+        $startPicker.Enabled = $dateCheck.Checked
+        $endPicker.Enabled = $dateCheck.Checked
+    })
+    $rawBrowseButton.Add_Click({
+        $folderDialog = New-Object Windows.Forms.FolderBrowserDialog
+        $folderDialog.Description = '选择原始 SILK 导出目录 / Select raw SILK output folder'
+        $folderDialog.ShowNewFolderButton = $true
+        if (Test-Path -LiteralPath $rawText.Text -PathType Container) {
+            $folderDialog.SelectedPath = $rawText.Text
+        }
+        if ($folderDialog.ShowDialog($dialogForm) -eq [Windows.Forms.DialogResult]::OK) {
+            $rawText.Text = $folderDialog.SelectedPath
+        }
+        $folderDialog.Dispose()
+    })
+
+    $dialogForm.AcceptButton = $okButton
+    $dialogForm.CancelButton = $closeButton
+    try {
+        if ($dialogForm.ShowDialog($form) -ne [Windows.Forms.DialogResult]::OK) {
+            return $null
+        }
+        if ([string]::IsNullOrWhiteSpace($rawText.Text)) {
+            throw '请选择原始 SILK 导出目录。 / Select a raw SILK output folder.'
+        }
+        return [PSCustomObject]@{
+            FilterByDate = $dateCheck.Checked
+            StartTime = $startPicker.Value.Date
+            EndTime = $endPicker.Value.Date.AddDays(1).AddTicks(-1)
+            Limit = [int]$limitControl.Value
+            RawOutput = [IO.Path]::GetFullPath($rawText.Text)
+        }
+    }
+    finally {
+        $dialogForm.Dispose()
+    }
+}
+
+function Import-WeChatDatabase {
+    param([string] $DatabasePath)
+
+    $settings = Show-WeChatImportDialog -DatabasePath $DatabasePath
+    if (-not $settings) {
+        return
+    }
+
+    $hadFiles = $fileList.Items.Count -gt 0
+    $form.UseWaitCursor = $true
+    $weChatDatabaseButton.Enabled = $false
+    $statusLabel.Text = '正在只读提取微信语音 / Extracting WeChat voices...'
+    [Windows.Forms.Application]::DoEvents()
+    try {
+        $parameters = @{
+            DatabasePath = $DatabasePath
+            OutputPath = $settings.RawOutput
+            Limit = $settings.Limit
+            ExtractorPath = $script:weChatExtractor
+            Force = $true
+            PassThru = $true
+        }
+        if ($settings.FilterByDate) {
+            $parameters.StartTime = $settings.StartTime
+            $parameters.EndTime = $settings.EndTime
+        }
+        $files = @(& $script:weChatExportScript @parameters)
+        foreach ($file in $files) {
+            if ($file -is [IO.FileInfo]) {
+                Add-GuiFile -Path $file.FullName
+            }
+        }
+        if (-not $hadFiles -and $fileList.Items.Count -gt 0) {
+            $outputText.Text = Join-Path (Join-Path $documents 'WeChat Voice Export') 'Converted'
+        }
+        $statusLabel.Text = "微信导入完成：$($files.Count) 个文件 / WeChat import complete"
+        Write-GuiLog $statusLabel.Text
+        if ($files.Count -eq 0) {
+            [void] [Windows.Forms.MessageBox]::Show(
+                $form,
+                '所选日期范围内没有找到可用的 SILK 语音。 / No SILK voices were found in the selected date range.',
+                'QQ / WeChat SILK Converter',
+                [Windows.Forms.MessageBoxButtons]::OK,
+                [Windows.Forms.MessageBoxIcon]::Information
+            )
+        }
+    }
+    finally {
+        $weChatDatabaseButton.Enabled = $true
+        $form.UseWaitCursor = $false
     }
 }
 
@@ -449,7 +689,7 @@ function Set-GuiBusy {
     param([bool] $Busy)
 
     foreach ($control in @(
-        $addFilesButton, $addFolderButton, $removeButton, $clearButton, $recurseCheck,
+        $addFilesButton, $addFolderButton, $weChatDatabaseButton, $removeButton, $clearButton, $recurseCheck,
         $fileList, $outputText, $browseOutputButton, $formatCombo, $rateCombo,
         $qualityCombo, $overwriteCheck, $ffmpegText, $browseFfmpegButton, $convertButton
     )) {
@@ -479,7 +719,7 @@ function Complete-GuiConversion {
     [void] [Windows.Forms.MessageBox]::Show(
         $form,
         $message,
-        'QQ SILK Converter',
+        'QQ / WeChat SILK Converter',
         [Windows.Forms.MessageBoxButtons]::OK,
         $(if ($script:failed -gt 0) { [Windows.Forms.MessageBoxIcon]::Warning } else { [Windows.Forms.MessageBoxIcon]::Information })
     )
@@ -586,8 +826,8 @@ $timer.Add_Tick({
 
 $addFilesButton.Add_Click({
     $dialog = New-Object Windows.Forms.OpenFileDialog
-    $dialog.Title = '选择 QQ SILK 语音文件 / Select voice files'
-    $dialog.Filter = 'QQ/SILK voice (*.amr;*.slk;*.silk;*.aud)|*.amr;*.slk;*.silk;*.aud|All files (*.*)|*.*'
+    $dialog.Title = '选择 QQ / SILK 语音文件 / Select voice files'
+    $dialog.Filter = 'QQ/WeChat SILK voice (*.amr;*.slk;*.silk;*.aud)|*.amr;*.slk;*.silk;*.aud|All files (*.*)|*.*'
     $dialog.Multiselect = $true
     if ($dialog.ShowDialog($form) -eq [Windows.Forms.DialogResult]::OK) {
         foreach ($path in $dialog.FileNames) {
@@ -605,6 +845,35 @@ $addFolderButton.Add_Click({
         Add-GuiPath -Path $dialog.SelectedPath
     }
     $dialog.Dispose()
+})
+
+$weChatDatabaseButton.Add_Click({
+    $dialog = New-Object Windows.Forms.OpenFileDialog
+    $dialog.Title = '选择已解密的微信 media_*.db / Select a decrypted WeChat media database'
+    $dialog.Filter = 'WeChat media database (media_*.db)|media_*.db|SQLite database (*.db)|*.db|All files (*.*)|*.*'
+    $dialog.Multiselect = $false
+    if (Test-Path -LiteralPath $documents -PathType Container) {
+        $dialog.InitialDirectory = $documents
+    }
+    try {
+        if ($dialog.ShowDialog($form) -eq [Windows.Forms.DialogResult]::OK) {
+            Import-WeChatDatabase -DatabasePath $dialog.FileName
+        }
+    }
+    catch {
+        $statusLabel.Text = '微信导入失败 / WeChat import failed'
+        Write-GuiLog $_.Exception.Message
+        [void] [Windows.Forms.MessageBox]::Show(
+            $form,
+            $_.Exception.Message,
+            'QQ / WeChat SILK Converter',
+            [Windows.Forms.MessageBoxButtons]::OK,
+            [Windows.Forms.MessageBoxIcon]::Warning
+        )
+    }
+    finally {
+        $dialog.Dispose()
+    }
 })
 
 $removeButton.Add_Click({
@@ -661,7 +930,7 @@ $openOutputButton.Add_Click({
         Start-Process explorer.exe -ArgumentList (ConvertTo-NativeArgument -Value $path)
     }
     catch {
-        [void] [Windows.Forms.MessageBox]::Show($form, $_.Exception.Message, 'QQ SILK Converter', 'OK', 'Error')
+        [void] [Windows.Forms.MessageBox]::Show($form, $_.Exception.Message, 'QQ / WeChat SILK Converter', 'OK', 'Error')
     }
 })
 
@@ -714,7 +983,7 @@ $convertButton.Add_Click({
         [void] [Windows.Forms.MessageBox]::Show(
             $form,
             $_.Exception.Message,
-            'QQ SILK Converter',
+            'QQ / WeChat SILK Converter',
             [Windows.Forms.MessageBoxButtons]::OK,
             [Windows.Forms.MessageBoxIcon]::Warning
         )
@@ -750,7 +1019,7 @@ $form.Add_FormClosing({
         $answer = [Windows.Forms.MessageBox]::Show(
             $form,
             '转换仍在进行，确定退出吗？ / Conversion is running. Exit?',
-            'QQ SILK Converter',
+            'QQ / WeChat SILK Converter',
             [Windows.Forms.MessageBoxButtons]::YesNo,
             [Windows.Forms.MessageBoxIcon]::Question
         )
@@ -762,7 +1031,7 @@ $form.Add_FormClosing({
     }
 })
 
-Write-GuiLog '就绪。添加文件或直接拖放到窗口。 / Ready. Add or drop files here.'
+Write-GuiLog '就绪。添加 QQ/SILK 文件，或导入已解密的微信媒体库。 / Ready for QQ files or a decrypted WeChat database.'
 if ($RenderPath) {
     $renderTarget = [IO.Path]::GetFullPath($RenderPath)
     $renderDirectory = [IO.Path]::GetDirectoryName($renderTarget)
