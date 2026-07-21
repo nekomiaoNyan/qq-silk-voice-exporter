@@ -40,6 +40,14 @@ The graphical interface supports:
 - choosing the output directory, overwrite behavior, MP3 quality, and the `ffmpeg.exe` needed for MP3;
 - progress reporting, cancellation, and a local activity log.
 
+QQ voice files are usually stored under:
+
+```text
+Documents\Tencent Files\<QQ-number>\nt_qq\nt_data\Ptt\YYYY-MM\Ori
+```
+
+In the file picker, sort or filter by **Date modified**. If the target file is missing, play that voice message once in QQ, then refresh or reopen the folder.
+
 Changing the output sample rate cannot restore quality that was not present in the source. MP3 still requires FFmpeg from a source you trust.
 
 If the launcher cannot start, run this command from the extracted directory:
@@ -70,7 +78,7 @@ Existing destination files are skipped by default. Add `-Force` to overwrite the
 
 ### MP3 output
 
-WAV output needs no additional software. MP3 output requires FFmpeg from a source you trust. Ensure `ffmpeg.exe` is available in `PATH`, or pass its location explicitly:
+WAV output needs no additional software. The GUI first looks for `ffmpeg.exe` next to the converter, then searches the system `PATH`, and fills the path automatically when found. If it is still missing, click **Select** in MP3 mode and choose a trusted FFmpeg executable. The command-line tool can also receive the path explicitly:
 
 ```powershell
 .\Convert-QQVoice.ps1 `
