@@ -43,7 +43,16 @@ typedef wchar_t path_char;
 #define path_compare _wcsicmp
 
 static FILE *path_open(const path_char *path, const path_char *mode) {
+#if defined(_MSC_VER)
+    FILE *file = NULL;
+
+    if (_wfopen_s(&file, path, mode) != 0) {
+        return NULL;
+    }
+    return file;
+#else
     return _wfopen(path, mode);
+#endif
 }
 
 static int path_remove(const path_char *path) {
