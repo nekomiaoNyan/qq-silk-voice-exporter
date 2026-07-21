@@ -45,13 +45,12 @@ if ($selfTest.Mp3Qualities -ne '2,4,6') {
     throw 'GUI MP3-quality list is unexpected.'
 }
 
-$launcher = Get-Content -LiteralPath (Join-Path $root 'Start-QQSilkConverter.cmd') -Raw
-if ($launcher -notmatch 'QQ-Silk-Converter-GUI\.ps1') {
-    throw 'GUI launcher does not reference the GUI script.'
-}
 $generalLauncher = Get-Content -LiteralPath (Join-Path $root 'Start-VoiceConverter.cmd') -Raw
 if ($generalLauncher -notmatch 'QQ-Silk-Converter-GUI\.ps1') {
     throw 'General GUI launcher does not reference the GUI script.'
+}
+if (Test-Path -LiteralPath (Join-Path $root 'Start-QQSilkConverter.cmd')) {
+    throw 'The obsolete duplicate launcher must not be present.'
 }
 
 $testDirectory = Join-Path ([IO.Path]::GetTempPath()) ('qq-silk-frontend-test-' + [Guid]::NewGuid().ToString('N'))

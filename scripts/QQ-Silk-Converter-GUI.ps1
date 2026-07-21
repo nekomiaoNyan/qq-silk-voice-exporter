@@ -185,38 +185,43 @@ $inputGroup.Anchor = 'Top,Left,Right'
 $form.Controls.Add($inputGroup)
 
 $addFilesButton = New-Object Windows.Forms.Button
-$addFilesButton.Text = '添加文件 / Add files'
+$addFilesButton.Text = '添加文件 / Files'
 $addFilesButton.Location = New-Object Drawing.Point(15, 28)
-$addFilesButton.Size = New-Object Drawing.Size(120, 32)
+$addFilesButton.Size = New-Object Drawing.Size(110, 32)
+$addFilesButton.AutoEllipsis = $true
 $inputGroup.Controls.Add($addFilesButton)
 
 $addFolderButton = New-Object Windows.Forms.Button
 $addFolderButton.Text = '添加文件夹 / Folder'
-$addFolderButton.Location = New-Object Drawing.Point(142, 28)
-$addFolderButton.Size = New-Object Drawing.Size(120, 32)
+$addFolderButton.Location = New-Object Drawing.Point(132, 28)
+$addFolderButton.Size = New-Object Drawing.Size(125, 32)
+$addFolderButton.AutoEllipsis = $true
 $inputGroup.Controls.Add($addFolderButton)
 
 $weChatDatabaseButton = New-Object Windows.Forms.Button
-$weChatDatabaseButton.Text = '导入微信 DB / WeChat DB'
-$weChatDatabaseButton.Location = New-Object Drawing.Point(269, 28)
-$weChatDatabaseButton.Size = New-Object Drawing.Size(170, 32)
+$weChatDatabaseButton.Text = '微信 DB / WeChat'
+$weChatDatabaseButton.Location = New-Object Drawing.Point(264, 28)
+$weChatDatabaseButton.Size = New-Object Drawing.Size(155, 32)
+$weChatDatabaseButton.AutoEllipsis = $true
 $inputGroup.Controls.Add($weChatDatabaseButton)
 
 $removeButton = New-Object Windows.Forms.Button
-$removeButton.Text = '移除选中 / Remove'
-$removeButton.Location = New-Object Drawing.Point(446, 28)
-$removeButton.Size = New-Object Drawing.Size(125, 32)
+$removeButton.Text = '移除 / Remove'
+$removeButton.Location = New-Object Drawing.Point(426, 28)
+$removeButton.Size = New-Object Drawing.Size(110, 32)
+$removeButton.AutoEllipsis = $true
 $inputGroup.Controls.Add($removeButton)
 
 $clearButton = New-Object Windows.Forms.Button
 $clearButton.Text = '清空 / Clear'
-$clearButton.Location = New-Object Drawing.Point(578, 28)
+$clearButton.Location = New-Object Drawing.Point(543, 28)
 $clearButton.Size = New-Object Drawing.Size(90, 32)
+$clearButton.AutoEllipsis = $true
 $inputGroup.Controls.Add($clearButton)
 
 $recurseCheck = New-Object Windows.Forms.CheckBox
 $recurseCheck.Text = '含子目录 / Recurse'
-$recurseCheck.Location = New-Object Drawing.Point(680, 34)
+$recurseCheck.Location = New-Object Drawing.Point(650, 34)
 $recurseCheck.Size = New-Object Drawing.Size(170, 24)
 $inputGroup.Controls.Add($recurseCheck)
 
@@ -363,7 +368,7 @@ $overwriteCheck.Size = New-Object Drawing.Size(265, 25)
 $optionsGroup.Controls.Add($overwriteCheck)
 
 $optionHint = New-Object Windows.Forms.Label
-$optionHint.Text = 'FFmpeg：同目录/PATH 自动查找；源文件只读。 / Auto-detect; source read-only.'
+$optionHint.Text = 'FFmpeg：自动查找；源文件只读 / Auto-detect; read-only.'
 $optionHint.ForeColor = [Drawing.Color]::FromArgb(90, 100, 115)
 $optionHint.Location = New-Object Drawing.Point(420, 159)
 $optionHint.AutoSize = $true
@@ -372,7 +377,7 @@ $optionsGroup.Controls.Add($optionHint)
 $convertButton = New-Object Windows.Forms.Button
 $convertButton.Text = '开始转换 / Convert'
 $convertButton.Location = New-Object Drawing.Point(15, 608)
-$convertButton.Size = New-Object Drawing.Size(165, 40)
+$convertButton.Size = New-Object Drawing.Size(185, 40)
 $convertButton.BackColor = [Drawing.Color]::FromArgb(0, 120, 215)
 $convertButton.ForeColor = [Drawing.Color]::White
 $convertButton.FlatStyle = 'Flat'
@@ -381,14 +386,14 @@ $form.Controls.Add($convertButton)
 
 $cancelButton = New-Object Windows.Forms.Button
 $cancelButton.Text = '取消 / Cancel'
-$cancelButton.Location = New-Object Drawing.Point(190, 608)
+$cancelButton.Location = New-Object Drawing.Point(210, 608)
 $cancelButton.Size = New-Object Drawing.Size(120, 40)
 $cancelButton.Enabled = $false
 $form.Controls.Add($cancelButton)
 
 $openOutputButton = New-Object Windows.Forms.Button
 $openOutputButton.Text = '打开输出目录 / Open output'
-$openOutputButton.Location = New-Object Drawing.Point(320, 608)
+$openOutputButton.Location = New-Object Drawing.Point(340, 608)
 $openOutputButton.Size = New-Object Drawing.Size(190, 40)
 $form.Controls.Add($openOutputButton)
 
