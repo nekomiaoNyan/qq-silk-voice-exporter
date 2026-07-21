@@ -4,7 +4,13 @@ English | [简体中文](README.md)
 
 Batch-export SILK V3 voice messages from the `nt_qq\nt_data\Ptt` directory used by recent Windows versions of QQ. This project contains auditable source code and a reproducible build workflow only. It does not include AutoIt, UPX, installers, self-extracting archives, telemetry, or network access.
 
-> No developer can permanently guarantee that a file will never trigger antivirus software. This project aims to reduce heuristic false positives and let users verify which source revision and GitHub Actions workflow produced a binary. Malware detection and a Microsoft SmartScreen “unknown app” reputation warning are different: a new unsigned program may still show a SmartScreen warning even when it contains no malicious code.
+## Why this project exists
+
+The legacy Windows package provided by the widely used [`silk-v3-decoder`](https://github.com/kn007/silk-v3-decoder/tree/master/windows) includes an AutoIt3-compiled `silk2mp3.exe`; its upstream README also notes that some antivirus products may report false positives. A false positive does not mean that the upstream program contains malware, but the uncertainty creates a significant barrier for people who simply want to export QQ voice messages.
+
+**This project was created as a fully open-source alternative to address antivirus reports around the popular `silk-v3-decoder` Windows tool.** Its goal is to make normal release packages much less likely to trigger false positives while allowing anyone to inspect the source, build process, and final files. The decoder is rebuilt from a pinned SILK SDK source revision, reuses none of the legacy Windows binaries, avoids AutoIt, UPX, packers, installers, and self-extractors, and is published through GitHub Actions with SHA-256 checksums and Artifact Attestations.
+
+> The precise promise is “fully open source, auditable, and designed to reduce false positives,” not “no antivirus product will ever alert.” Security rules and file reputation change over time, and a new unsigned program may still receive a Microsoft SmartScreen “unknown app” warning even when it contains no malicious code.
 
 ## Design
 
