@@ -51,6 +51,24 @@ function Resolve-GuiDecoder {
     throw 'qq-silk.exe was not found next to the GUI script.'
 }
 
+function Resolve-GuiFfmpeg {
+    $localCandidates = @(
+        (Join-Path $PSScriptRoot 'ffmpeg.exe'),
+        (Join-Path $PSScriptRoot '..\ffmpeg.exe')
+    )
+    foreach ($candidate in $localCandidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    $command = Get-Command ffmpeg.exe -CommandType Application -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+    return $null
+}
+
 function ConvertTo-NativeArgument {
     param([AllowEmptyString()][string] $Value)
 
@@ -89,6 +107,7 @@ function ConvertTo-NativeArgument {
 
 $script:batchScript = Resolve-CompanionFile -Name 'Convert-QQVoice.ps1'
 $script:decoder = Resolve-GuiDecoder -RequestedPath $DecoderPath
+$script:defaultFfmpeg = Resolve-GuiFfmpeg
 $script:supportedExtensions = @('.amr', '.slk', '.silk', '.aud')
 $script:supportedRates = @(8000, 12000, 16000, 24000, 32000, 44100, 48000)
 
@@ -99,6 +118,8 @@ if ($SelfTest) {
         DecoderFound = Test-Path -LiteralPath $script:decoder -PathType Leaf
         SampleRates = $script:supportedRates -join ','
         Mp3Qualities = '2,4,6'
+        FfmpegFound = [bool]$script:defaultFfmpeg
+        FfmpegPath = $script:defaultFfmpeg
     }
     return
 }
@@ -108,8 +129,8 @@ if ($SelfTest) {
 $form = New-Object Windows.Forms.Form
 $form.Text = 'QQ SILK 语音转换器 / Voice Converter'
 $form.StartPosition = 'CenterScreen'
-$form.ClientSize = New-Object Drawing.Size(900, 780)
-$form.MinimumSize = New-Object Drawing.Size(800, 700)
+$form.ClientSize = New-Object Drawing.Size(900, 820)
+$form.MinimumSize = New-Object Drawing.Size(800, 740)
 $form.Font = New-Object Drawing.Font('Microsoft YaHei UI', 9)
 $form.BackColor = [Drawing.Color]::FromArgb(248, 249, 251)
 $form.AllowDrop = $true
@@ -133,7 +154,7 @@ $form.Controls.Add($subtitleLabel)
 $inputGroup = New-Object Windows.Forms.GroupBox
 $inputGroup.Text = '1. 输入文件 / Input files'
 $inputGroup.Location = New-Object Drawing.Point(15, 78)
-$inputGroup.Size = New-Object Drawing.Size(870, 292)
+$inputGroup.Size = New-Object Drawing.Size(870, 315)
 $inputGroup.Anchor = 'Top,Left,Right'
 $form.Controls.Add($inputGroup)
 
@@ -173,7 +194,7 @@ $fileList.FullRowSelect = $true
 $fileList.GridLines = $true
 $fileList.HideSelection = $false
 $fileList.Location = New-Object Drawing.Point(15, 70)
-$fileList.Size = New-Object Drawing.Size(838, 178)
+$fileList.Size = New-Object Drawing.Size(838, 150)
 $fileList.Anchor = 'Top,Bottom,Left,Right'
 [void] $fileList.Columns.Add('文件 / File', 285)
 [void] $fileList.Columns.Add('目录 / Folder', 525)
@@ -181,20 +202,34 @@ $inputGroup.Controls.Add($fileList)
 
 $countLabel = New-Object Windows.Forms.Label
 $countLabel.Text = '已选择 0 个文件 / 0 files selected'
-$countLabel.Location = New-Object Drawing.Point(17, 258)
+$countLabel.Location = New-Object Drawing.Point(17, 230)
 $countLabel.AutoSize = $true
 $inputGroup.Controls.Add($countLabel)
 
 $dropHint = New-Object Windows.Forms.Label
 $dropHint.Text = '支持 .amr .slk .silk .aud，也可拖放文件或文件夹'
 $dropHint.ForeColor = [Drawing.Color]::FromArgb(95, 105, 120)
-$dropHint.Location = New-Object Drawing.Point(500, 258)
+$dropHint.Location = New-Object Drawing.Point(500, 230)
 $dropHint.AutoSize = $true
 $inputGroup.Controls.Add($dropHint)
 
+$locationHint = New-Object Windows.Forms.Label
+$locationHint.Text = 'QQ 语音位置 / Location: 文档\Tencent Files\<QQ号>\nt_qq\nt_data\Ptt\YYYY-MM\Ori'
+$locationHint.ForeColor = [Drawing.Color]::FromArgb(60, 90, 135)
+$locationHint.Location = New-Object Drawing.Point(17, 254)
+$locationHint.AutoSize = $true
+$inputGroup.Controls.Add($locationHint)
+
+$dateHint = New-Object Windows.Forms.Label
+$dateHint.Text = '提示：可按“修改日期”排序/筛选；找不到时先在 QQ 播放一次目标语音，再刷新文件夹。 / Sort by date; play it in QQ, then refresh.'
+$dateHint.ForeColor = [Drawing.Color]::FromArgb(95, 105, 120)
+$dateHint.Location = New-Object Drawing.Point(17, 277)
+$dateHint.AutoSize = $true
+$inputGroup.Controls.Add($dateHint)
+
 $optionsGroup = New-Object Windows.Forms.GroupBox
 $optionsGroup.Text = '2. 转换参数 / Conversion options'
-$optionsGroup.Location = New-Object Drawing.Point(15, 380)
+$optionsGroup.Location = New-Object Drawing.Point(15, 403)
 $optionsGroup.Size = New-Object Drawing.Size(870, 190)
 $optionsGroup.Anchor = 'Top,Left,Right'
 $form.Controls.Add($optionsGroup)
@@ -276,9 +311,8 @@ $ffmpegText.Location = New-Object Drawing.Point(145, 119)
 $ffmpegText.Size = New-Object Drawing.Size(590, 25)
 $ffmpegText.Anchor = 'Top,Left,Right'
 $ffmpegText.Enabled = $false
-$ffmpegCommand = Get-Command ffmpeg.exe -CommandType Application -ErrorAction SilentlyContinue
-if ($ffmpegCommand) {
-    $ffmpegText.Text = $ffmpegCommand.Source
+if ($script:defaultFfmpeg) {
+    $ffmpegText.Text = $script:defaultFfmpeg
 }
 $optionsGroup.Controls.Add($ffmpegText)
 
@@ -297,7 +331,7 @@ $overwriteCheck.Size = New-Object Drawing.Size(265, 25)
 $optionsGroup.Controls.Add($overwriteCheck)
 
 $optionHint = New-Object Windows.Forms.Label
-$optionHint.Text = 'WAV 无需 FFmpeg；源文件不会被修改。 / Source files are never modified.'
+$optionHint.Text = 'FFmpeg 自动查找同目录/PATH；源文件不会被修改。 / Auto-detects local/PATH FFmpeg.'
 $optionHint.ForeColor = [Drawing.Color]::FromArgb(90, 100, 115)
 $optionHint.Location = New-Object Drawing.Point(420, 159)
 $optionHint.AutoSize = $true
@@ -305,7 +339,7 @@ $optionsGroup.Controls.Add($optionHint)
 
 $convertButton = New-Object Windows.Forms.Button
 $convertButton.Text = '开始转换 / Convert'
-$convertButton.Location = New-Object Drawing.Point(15, 585)
+$convertButton.Location = New-Object Drawing.Point(15, 608)
 $convertButton.Size = New-Object Drawing.Size(165, 40)
 $convertButton.BackColor = [Drawing.Color]::FromArgb(0, 120, 215)
 $convertButton.ForeColor = [Drawing.Color]::White
@@ -315,32 +349,32 @@ $form.Controls.Add($convertButton)
 
 $cancelButton = New-Object Windows.Forms.Button
 $cancelButton.Text = '取消 / Cancel'
-$cancelButton.Location = New-Object Drawing.Point(190, 585)
+$cancelButton.Location = New-Object Drawing.Point(190, 608)
 $cancelButton.Size = New-Object Drawing.Size(120, 40)
 $cancelButton.Enabled = $false
 $form.Controls.Add($cancelButton)
 
 $openOutputButton = New-Object Windows.Forms.Button
 $openOutputButton.Text = '打开输出目录 / Open output'
-$openOutputButton.Location = New-Object Drawing.Point(320, 585)
+$openOutputButton.Location = New-Object Drawing.Point(320, 608)
 $openOutputButton.Size = New-Object Drawing.Size(190, 40)
 $form.Controls.Add($openOutputButton)
 
 $progressBar = New-Object Windows.Forms.ProgressBar
-$progressBar.Location = New-Object Drawing.Point(15, 638)
+$progressBar.Location = New-Object Drawing.Point(15, 661)
 $progressBar.Size = New-Object Drawing.Size(870, 20)
 $progressBar.Anchor = 'Top,Left,Right'
 $form.Controls.Add($progressBar)
 
 $statusLabel = New-Object Windows.Forms.Label
 $statusLabel.Text = '就绪 / Ready'
-$statusLabel.Location = New-Object Drawing.Point(17, 664)
+$statusLabel.Location = New-Object Drawing.Point(17, 687)
 $statusLabel.AutoSize = $true
 $form.Controls.Add($statusLabel)
 
 $logText = New-Object Windows.Forms.TextBox
-$logText.Location = New-Object Drawing.Point(15, 690)
-$logText.Size = New-Object Drawing.Size(870, 72)
+$logText.Location = New-Object Drawing.Point(15, 713)
+$logText.Size = New-Object Drawing.Size(870, 88)
 $logText.Anchor = 'Top,Bottom,Left,Right'
 $logText.Multiline = $true
 $logText.ReadOnly = $true

@@ -40,6 +40,7 @@ if ($launcher -notmatch 'QQ-Silk-Converter-GUI\.ps1') {
 }
 
 $testDirectory = Join-Path ([IO.Path]::GetTempPath()) ('qq-silk-frontend-test-' + [Guid]::NewGuid().ToString('N'))
+$originalPath = $env:Path
 New-Item -ItemType Directory -Path $testDirectory | Out-Null
 try {
     $inputFile = Join-Path $testDirectory 'header-only.amr'
@@ -48,6 +49,8 @@ try {
     $decoderLog = Join-Path $testDirectory 'decoder-arguments.txt'
     $mockFfmpeg = Join-Path $testDirectory 'mock-ffmpeg.cmd'
     $ffmpegLog = Join-Path $testDirectory 'ffmpeg-arguments.txt'
+    $frontendPackage = Join-Path $testDirectory 'frontend package'
+    $pathFfmpegDirectory = Join-Path $testDirectory 'ffmpeg on path'
     [IO.File]::WriteAllBytes(
         $inputFile,
         [byte[]](0x02, 0x23, 0x21, 0x53, 0x49, 0x4c, 0x4b, 0x5f, 0x56, 0x33)
@@ -57,6 +60,27 @@ try {
         "@echo off`r`n> `"%QQ_SILK_DECODER_LOG%`" echo %*`r`n> %2 echo RIFF`r`nexit /b 0`r`n",
         [Text.Encoding]::ASCII
     )
+    New-Item -ItemType Directory -Path $pathFfmpegDirectory | Out-Null
+    $pathFfmpeg = Join-Path $pathFfmpegDirectory 'ffmpeg.exe'
+    [IO.File]::WriteAllBytes($pathFfmpeg, [byte[]](0x4d, 0x5a))
+    $env:Path = "$pathFfmpegDirectory;$originalPath"
+    $pathSelfTest = & (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') `
+        -SelfTest `
+        -DecoderPath $DecoderPath
+    if (-not $pathSelfTest.FfmpegFound -or $pathSelfTest.FfmpegPath -ne $pathFfmpeg) {
+        throw 'GUI did not automatically detect ffmpeg.exe on PATH.'
+    }
+    New-Item -ItemType Directory -Path $frontendPackage | Out-Null
+    Copy-Item (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') $frontendPackage
+    Copy-Item (Join-Path $root 'scripts\Convert-QQVoice.ps1') $frontendPackage
+    $localFfmpeg = Join-Path $frontendPackage 'ffmpeg.exe'
+    [IO.File]::WriteAllBytes($localFfmpeg, [byte[]](0x4d, 0x5a))
+    $packagedSelfTest = & (Join-Path $frontendPackage 'QQ-Silk-Converter-GUI.ps1') `
+        -SelfTest `
+        -DecoderPath $DecoderPath
+    if (-not $packagedSelfTest.FfmpegFound -or $packagedSelfTest.FfmpegPath -ne $localFfmpeg) {
+        throw 'GUI did not automatically detect ffmpeg.exe next to the converter.'
+    }
     [IO.File]::WriteAllText(
         $mockFfmpeg,
         "@echo off`r`nsetlocal EnableExtensions`r`n> `"%QQ_SILK_FFMPEG_LOG%`" echo %*`r`nset `"last=`"`r`nfor %%A in (%*) do set `"last=%%~A`"`r`n> `"%last%`" echo ID3`r`nexit /b 0`r`n",
@@ -87,6 +111,7 @@ try {
     }
 }
 finally {
+    $env:Path = $originalPath
     Remove-Item Env:QQ_SILK_DECODER_LOG -ErrorAction SilentlyContinue
     Remove-Item Env:QQ_SILK_FFMPEG_LOG -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath $testDirectory) {
