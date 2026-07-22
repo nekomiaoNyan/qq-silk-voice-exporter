@@ -42,7 +42,7 @@ jobs:
           Copy-Item build/Release/wechat-voice.exe dist/package/
           Copy-Item build/Release/wechat-record.exe dist/package/
           Copy-Item scripts/Convert-QQVoice.ps1,scripts/Export-WeChatVoice.ps1,scripts/QQ-Silk-Converter-GUI.ps1 dist/package/
-          Copy-Item Start-VoiceConverter.cmd dist/package/
+          Copy-Item Start-VoiceConverter.vbs dist/package/
           Copy-Item README.md,README.en.md,THIRD_PARTY_NOTICES.md,LICENSE dist/package/
           Copy-Item LICENSES dist/package/LICENSES -Recurse
           $files = Get-ChildItem dist/package -File -Recurse | Sort-Object FullName

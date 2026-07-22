@@ -165,7 +165,7 @@ install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/Convert-QQVoice.ps1"
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/Export-WeChatVoice.ps1"
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/QQ-Silk-Converter-GUI.ps1"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Start-VoiceConverter.cmd"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Start-VoiceConverter.vbs"
     "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
     DESTINATION .
