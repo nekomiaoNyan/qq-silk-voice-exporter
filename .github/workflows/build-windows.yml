@@ -32,7 +32,7 @@ jobs:
 
       - name: Test PowerShell front ends
         shell: pwsh
-        run: .\tests\Test-PowerShellFrontends.ps1 -DecoderPath .\build\Release\qq-silk.exe -WeChatExtractorPath .\build\Release\wechat-voice.exe
+        run: .\tests\Test-PowerShellFrontends.ps1 -DecoderPath .\build\Release\qq-silk.exe -WeChatExtractorPath .\build\Release\wechat-voice.exe -WeChatRecorderPath .\build\Release\wechat-record.exe
 
       - name: Package auditable binary
         shell: pwsh
@@ -40,6 +40,7 @@ jobs:
           New-Item -ItemType Directory -Path dist/package | Out-Null
           Copy-Item build/Release/qq-silk.exe dist/package/
           Copy-Item build/Release/wechat-voice.exe dist/package/
+          Copy-Item build/Release/wechat-record.exe dist/package/
           Copy-Item scripts/Convert-QQVoice.ps1,scripts/Export-WeChatVoice.ps1,scripts/QQ-Silk-Converter-GUI.ps1 dist/package/
           Copy-Item Start-VoiceConverter.cmd dist/package/
           Copy-Item README.md,README.en.md,THIRD_PARTY_NOTICES.md,LICENSE dist/package/
