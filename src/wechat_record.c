@@ -1,7 +1,6 @@
 #define COBJMACROS
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <initguid.h>
 #include <audioclient.h>
 #include <conio.h>
 #include <mmdeviceapi.h>
@@ -44,6 +43,25 @@ typedef struct AUDIOCLIENT_ACTIVATION_PARAMS {
 #ifndef VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK
 #define VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK L"VAD\\Process_Loopback"
 #endif
+
+static const GUID g_iid_unknown = {
+    0x00000000, 0x0000, 0x0000, {0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}
+};
+static const GUID g_iid_audio_client = {
+    0x1cb9ad4c, 0xdbfa, 0x4c32, {0xb1, 0x78, 0xc2, 0xf5, 0x68, 0xa7, 0x03, 0xb2}
+};
+static const GUID g_iid_audio_capture_client = {
+    0xc8adbd64, 0xe71e, 0x48a0, {0xa4, 0xde, 0x18, 0x5c, 0x39, 0x5c, 0xd3, 0x17}
+};
+static const GUID g_iid_device_enumerator = {
+    0xa95664d2, 0x9614, 0x4f35, {0xa7, 0x46, 0xde, 0x8d, 0xb6, 0x36, 0x17, 0xe6}
+};
+static const GUID g_iid_activation_completion_handler = {
+    0x41d949ab, 0x9862, 0x444a, {0x80, 0xf6, 0xc2, 0x61, 0x33, 0x4d, 0xa5, 0xeb}
+};
+static const GUID g_clsid_device_enumerator = {
+    0xbcde0395, 0xe52f, 0x467c, {0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e}
+};
 
 static volatile LONG g_stop_requested = 0;
 
@@ -227,8 +245,8 @@ static HRESULT STDMETHODCALLTYPE activation_handler_query_interface(
         return E_POINTER;
     }
     *object = NULL;
-    if (IsEqualIID(interface_id, &IID_IUnknown) ||
-        IsEqualIID(interface_id, &IID_IActivateAudioInterfaceCompletionHandler)) {
+    if (IsEqualIID(interface_id, &g_iid_unknown) ||
+        IsEqualIID(interface_id, &g_iid_activation_completion_handler)) {
         *object = interface_value;
         (void)IActivateAudioInterfaceCompletionHandler_AddRef(interface_value);
         return S_OK;
@@ -280,7 +298,7 @@ static HRESULT STDMETHODCALLTYPE activation_handler_completed(
         result = operation_result;
     }
     if (SUCCEEDED(result)) {
-        result = IUnknown_QueryInterface(activated_interface, &IID_IAudioClient,
+        result = IUnknown_QueryInterface(activated_interface, &g_iid_audio_client,
                                          (void **)&handler->audio_client);
     }
     if (activated_interface != NULL) {
@@ -351,7 +369,7 @@ static HRESULT activate_process_audio_client(DWORD process_id,
 
     result = ActivateAudioInterfaceAsync(
         VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
-        &IID_IAudioClient,
+        &g_iid_audio_client,
         &activation_variant,
         &handler->interface_value,
         &operation);
@@ -421,8 +439,8 @@ static int record_loopback(const wchar_t *output_path, DWORD maximum_seconds,
             AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
             0, 0, mix_format, NULL);
     } else {
-        result = CoCreateInstance(&CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL,
-                                  &IID_IMMDeviceEnumerator, (void **)&enumerator);
+        result = CoCreateInstance(&g_clsid_device_enumerator, NULL, CLSCTX_ALL,
+                                  &g_iid_device_enumerator, (void **)&enumerator);
         if (FAILED(result)) {
             print_hresult("Create audio device enumerator", result);
             goto cleanup;
@@ -432,7 +450,7 @@ static int record_loopback(const wchar_t *output_path, DWORD maximum_seconds,
             print_hresult("Open default playback device", result);
             goto cleanup;
         }
-        result = IMMDevice_Activate(device, &IID_IAudioClient, CLSCTX_ALL, NULL,
+        result = IMMDevice_Activate(device, &g_iid_audio_client, CLSCTX_ALL, NULL,
                                    (void **)&audio_client);
         if (FAILED(result)) {
             print_hresult("Activate Windows audio client", result);
@@ -452,7 +470,7 @@ static int record_loopback(const wchar_t *output_path, DWORD maximum_seconds,
         print_hresult("Initialize loopback recording", result);
         goto cleanup;
     }
-    result = IAudioClient_GetService(audio_client, &IID_IAudioCaptureClient,
+    result = IAudioClient_GetService(audio_client, &g_iid_audio_capture_client,
                                      (void **)&capture_client);
     if (FAILED(result)) {
         print_hresult("Open loopback capture service", result);
