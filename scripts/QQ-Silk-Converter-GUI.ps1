@@ -40,6 +40,7 @@ function Resolve-GuiDecoder {
     }
 
     $candidates = @(
+        (Join-Path $PSScriptRoot 'bin\qq-silk.exe'),
         (Join-Path $PSScriptRoot 'qq-silk.exe'),
         (Join-Path $PSScriptRoot '..\qq-silk.exe'),
         (Join-Path $PSScriptRoot '..\build\Release\qq-silk.exe'),
@@ -50,7 +51,7 @@ function Resolve-GuiDecoder {
             return (Resolve-Path -LiteralPath $candidate).Path
         }
     }
-    throw 'qq-silk.exe was not found next to the GUI script.'
+    throw 'qq-silk.exe was not found in the package bin directory or build directory. Re-extract the complete Release ZIP.'
 }
 
 function Resolve-GuiWeChatExtractor {
@@ -61,6 +62,7 @@ function Resolve-GuiWeChatExtractor {
     }
 
     $candidates = @(
+        (Join-Path $PSScriptRoot 'bin\wechat-voice.exe'),
         (Join-Path $PSScriptRoot 'wechat-voice.exe'),
         (Join-Path $PSScriptRoot '..\wechat-voice.exe'),
         (Join-Path $PSScriptRoot '..\build\Release\wechat-voice.exe'),
@@ -71,7 +73,7 @@ function Resolve-GuiWeChatExtractor {
             return (Resolve-Path -LiteralPath $candidate).Path
         }
     }
-    throw 'wechat-voice.exe was not found next to the GUI script.'
+    throw 'wechat-voice.exe was not found in the package bin directory or build directory. Re-extract the complete Release ZIP.'
 }
 
 function Resolve-GuiWeChatRecorder {
@@ -82,6 +84,7 @@ function Resolve-GuiWeChatRecorder {
     }
 
     $candidates = @(
+        (Join-Path $PSScriptRoot 'bin\wechat-record.exe'),
         (Join-Path $PSScriptRoot 'wechat-record.exe'),
         (Join-Path $PSScriptRoot '..\wechat-record.exe'),
         (Join-Path $PSScriptRoot '..\build\Release\wechat-record.exe'),
@@ -92,7 +95,7 @@ function Resolve-GuiWeChatRecorder {
             return (Resolve-Path -LiteralPath $candidate).Path
         }
     }
-    throw 'wechat-record.exe was not found next to the GUI script.'
+    throw 'wechat-record.exe was not found in the package bin directory or build directory. Re-extract the complete Release ZIP.'
 }
 
 function Resolve-GuiFfmpeg {

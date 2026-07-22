@@ -53,6 +53,7 @@ function Resolve-DecoderPath {
     }
 
     $candidates = @(
+        (Join-Path $PSScriptRoot 'bin\qq-silk.exe'),
         (Join-Path $PSScriptRoot 'qq-silk.exe'),
         (Join-Path $PSScriptRoot '..\qq-silk.exe'),
         (Join-Path $PSScriptRoot '..\build\Release\qq-silk.exe'),
@@ -65,7 +66,7 @@ function Resolve-DecoderPath {
         }
     }
 
-    throw 'qq-silk.exe was not found. Download the GitHub Actions artifact or use -DecoderPath.'
+    throw 'qq-silk.exe was not found in the package bin directory or build directory. Re-extract the complete Release ZIP or use -DecoderPath.'
 }
 
 function Resolve-FfmpegPath {

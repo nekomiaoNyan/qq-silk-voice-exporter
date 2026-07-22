@@ -63,6 +63,15 @@ foreach ($scriptPath in $scripts) {
     }
 }
 
+foreach ($readmeName in @('README.md', 'README.en.md')) {
+    $readme = Get-Content -LiteralPath (Join-Path $root $readmeName) -Raw
+    if ($readme -notmatch 'QQ-WeChat-SILK-Voice-Converter-v1\.3\.1-windows-x64\.zip' -or
+        $readme -notmatch 'Start-VoiceConverter\.exe' -or
+        $readme -notmatch '(?i)bin') {
+        throw "$readmeName does not prominently identify the download and single GUI entry point."
+    }
+}
+
 $guiSource = Get-Content -LiteralPath (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') -Raw
 if ($guiSource -notmatch 'record-process' -or
     $guiSource -notmatch 'WeChat only' -or
@@ -108,6 +117,7 @@ try {
     $mockFfmpeg = Join-Path $testDirectory 'mock-ffmpeg.cmd'
     $ffmpegLog = Join-Path $testDirectory 'ffmpeg-arguments.txt'
     $frontendPackage = Join-Path $testDirectory 'frontend package'
+    $frontendBin = Join-Path $frontendPackage 'bin'
     $pathFfmpegDirectory = Join-Path $testDirectory 'ffmpeg on path'
     [IO.File]::WriteAllBytes(
         $inputFile,
@@ -146,23 +156,34 @@ try {
     if (-not $pathSelfTest.FfmpegFound -or $pathSelfTest.FfmpegPath -ne $pathFfmpeg) {
         throw 'GUI did not automatically detect ffmpeg.exe on PATH.'
     }
-    New-Item -ItemType Directory -Path $frontendPackage | Out-Null
+    New-Item -ItemType Directory -Path $frontendBin | Out-Null
     Copy-Item (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') $frontendPackage
     Copy-Item (Join-Path $root 'scripts\Convert-QQVoice.ps1') $frontendPackage
     Copy-Item (Join-Path $root 'scripts\Export-WeChatVoice.ps1') $frontendPackage
-    Copy-Item $DecoderPath (Join-Path $frontendPackage 'qq-silk.exe')
     Copy-Item $LauncherPath (Join-Path $frontendPackage 'Start-VoiceConverter.exe')
-    Copy-Item $WeChatExtractorPath (Join-Path $frontendPackage 'wechat-voice.exe')
-    Copy-Item $WeChatRecorderPath (Join-Path $frontendPackage 'wechat-record.exe')
+    Copy-Item $DecoderPath (Join-Path $frontendBin 'qq-silk.exe')
+    Copy-Item $WeChatExtractorPath (Join-Path $frontendBin 'wechat-voice.exe')
+    Copy-Item $WeChatRecorderPath (Join-Path $frontendBin 'wechat-record.exe')
     $localFfmpeg = Join-Path $frontendPackage 'ffmpeg.exe'
     [IO.File]::WriteAllBytes($localFfmpeg, [byte[]](0x4d, 0x5a))
-    $packagedSelfTest = & (Join-Path $frontendPackage 'QQ-Silk-Converter-GUI.ps1') `
-        -SelfTest `
-        -DecoderPath $DecoderPath `
-        -WeChatExtractorPath (Join-Path $frontendPackage 'wechat-voice.exe') `
-        -WeChatRecorderPath (Join-Path $frontendPackage 'wechat-record.exe')
-    if (-not $packagedSelfTest.FfmpegFound -or $packagedSelfTest.FfmpegPath -ne $localFfmpeg) {
-        throw 'GUI did not automatically detect ffmpeg.exe next to the converter.'
+    $packagedSelfTest = & (Join-Path $frontendPackage 'QQ-Silk-Converter-GUI.ps1') -SelfTest
+    if (-not $packagedSelfTest.DecoderFound -or
+        -not $packagedSelfTest.WeChatExtractorFound -or
+        -not $packagedSelfTest.WeChatRecorderFound -or
+        -not $packagedSelfTest.FfmpegFound -or
+        $packagedSelfTest.FfmpegPath -ne $localFfmpeg) {
+        throw 'GUI did not automatically detect the packaged bin components or adjacent ffmpeg.exe.'
+    }
+    $rootExecutables = @(Get-ChildItem -LiteralPath $frontendPackage -File -Filter '*.exe')
+    if ($rootExecutables.Count -ne 2 -or
+        'Start-VoiceConverter.exe' -notin $rootExecutables.Name -or
+        'ffmpeg.exe' -notin $rootExecutables.Name) {
+        throw 'The packaged root must contain only the launcher and optional user-provided ffmpeg.exe.'
+    }
+    $binExecutables = @(Get-ChildItem -LiteralPath $frontendBin -File -Filter '*.exe' | Sort-Object Name | ForEach-Object Name)
+    $expectedBinExecutables = @('qq-silk.exe', 'wechat-record.exe', 'wechat-voice.exe') | Sort-Object
+    if (@(Compare-Object $expectedBinExecutables $binExecutables).Count -ne 0) {
+        throw 'The packaged bin directory has an unexpected executable layout.'
     }
     Invoke-LauncherSelfTest -Path (Join-Path $frontendPackage 'Start-VoiceConverter.exe')
     [IO.File]::WriteAllText(
