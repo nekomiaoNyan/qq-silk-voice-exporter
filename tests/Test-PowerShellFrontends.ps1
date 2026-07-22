@@ -7,7 +7,10 @@ param(
     [string] $WeChatExtractorPath,
 
     [Parameter(Mandatory)]
-    [string] $WeChatRecorderPath
+    [string] $WeChatRecorderPath,
+
+    [Parameter(Mandatory)]
+    [string] $LauncherPath
 )
 
 Set-StrictMode -Version 3.0
@@ -57,19 +60,33 @@ if ($selfTest.Mp3Qualities -ne '2,4,6') {
     throw 'GUI MP3-quality list is unexpected.'
 }
 
-$generalLauncherPath = Join-Path $root 'Start-VoiceConverter.vbs'
-$generalLauncher = Get-Content -LiteralPath $generalLauncherPath -Raw
-if ($generalLauncher -notmatch 'QQ-Silk-Converter-GUI\.ps1') {
-    throw 'General GUI launcher does not reference the GUI script.'
+$launcher = (Resolve-Path -LiteralPath $LauncherPath -ErrorAction Stop).Path
+$launcherStartInfo = New-Object Diagnostics.ProcessStartInfo
+$launcherStartInfo.FileName = $launcher
+$launcherStartInfo.Arguments = '--self-test'
+$launcherStartInfo.UseShellExecute = $false
+$launcherStartInfo.CreateNoWindow = $true
+$launcherProcess = New-Object Diagnostics.Process
+$launcherProcess.StartInfo = $launcherStartInfo
+try {
+    if (-not $launcherProcess.Start()) {
+        throw 'Native GUI launcher self-test process did not start.'
+    }
+    if (-not $launcherProcess.WaitForExit(60000)) {
+        $launcherProcess.Kill()
+        throw 'Native GUI launcher self-test timed out after 60 seconds.'
+    }
+    if ($launcherProcess.ExitCode -ne 0) {
+        throw "Native GUI launcher self-test failed with exit code $($launcherProcess.ExitCode)."
+    }
 }
-if ($generalLauncher -notmatch 'scripts\\QQ-Silk-Converter-GUI\.ps1') {
-    throw 'General GUI launcher does not support the source-tree script layout.'
+finally {
+    $launcherProcess.Dispose()
 }
-if ($generalLauncher -notmatch 'shell\.Run\(command, 0, True\)') {
-    throw 'General GUI launcher does not hide the console window.'
-}
-if (Test-Path -LiteralPath (Join-Path $root 'Start-VoiceConverter.cmd')) {
-    throw 'The obsolete console launcher must not be present.'
+foreach ($obsoleteLauncher in @('Start-VoiceConverter.cmd', 'Start-VoiceConverter.vbs')) {
+    if (Test-Path -LiteralPath (Join-Path $root $obsoleteLauncher)) {
+        throw "The obsolete launcher must not be present: $obsoleteLauncher"
+    }
 }
 
 $testDirectory = Join-Path ([IO.Path]::GetTempPath()) ('qq-silk-frontend-test-' + [Guid]::NewGuid().ToString('N'))

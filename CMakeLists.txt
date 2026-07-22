@@ -83,6 +83,9 @@ add_executable(qq-silk src/qq_silk.c)
 target_link_libraries(qq-silk PRIVATE silk_sdk)
 
 if(WIN32)
+    add_executable(voice-converter-launcher WIN32 src/voice_converter_launcher.c)
+    set_target_properties(voice-converter-launcher PROPERTIES OUTPUT_NAME "Start-VoiceConverter")
+    target_link_libraries(voice-converter-launcher PRIVATE user32)
     add_executable(wechat-voice src/wechat_voice.c)
     add_executable(wechat-record src/wechat_record.c)
     target_link_libraries(wechat-record PRIVATE ole32 mmdevapi)
@@ -94,6 +97,7 @@ if(MSVC)
     target_compile_options(qq-silk PRIVATE /W4 /O2 /GS /guard:cf /sdl /utf-8)
     target_compile_options(wechat-voice PRIVATE /W4 /O2 /GS /guard:cf /sdl /utf-8)
     target_compile_options(wechat-record PRIVATE /W4 /O2 /GS /guard:cf /sdl /utf-8)
+    target_compile_options(voice-converter-launcher PRIVATE /W4 /O2 /GS /guard:cf /sdl /utf-8)
     target_link_options(qq-silk PRIVATE
         /Brepro
         /CETCOMPAT
@@ -118,14 +122,24 @@ if(MSVC)
         /HIGHENTROPYVA
         /NXCOMPAT
     )
+    target_link_options(voice-converter-launcher PRIVATE
+        /Brepro
+        /CETCOMPAT
+        /DYNAMICBASE
+        /guard:cf
+        /HIGHENTROPYVA
+        /NXCOMPAT
+    )
 elseif(MINGW)
     target_compile_options(silk_sdk PRIVATE -O2 -fstack-protector-strong)
     target_compile_options(qq-silk PRIVATE -Wall -Wextra -Wpedantic -O2 -fstack-protector-strong)
     target_compile_options(wechat-voice PRIVATE -Wall -Wextra -Wpedantic -O2 -fstack-protector-strong)
     target_compile_options(wechat-record PRIVATE -Wall -Wextra -Wpedantic -O2 -fstack-protector-strong)
+    target_compile_options(voice-converter-launcher PRIVATE -Wall -Wextra -Wpedantic -O2 -fstack-protector-strong)
     target_link_options(qq-silk PRIVATE -municode -Wl,--dynamicbase,--high-entropy-va,--nxcompat)
     target_link_options(wechat-voice PRIVATE -municode -Wl,--dynamicbase,--high-entropy-va,--nxcompat)
     target_link_options(wechat-record PRIVATE -municode -Wl,--dynamicbase,--high-entropy-va,--nxcompat)
+    target_link_options(voice-converter-launcher PRIVATE -municode -Wl,--dynamicbase,--high-entropy-va,--nxcompat)
 else()
     target_compile_options(silk_sdk PRIVATE -O2 -fstack-protector-strong)
     target_compile_options(qq-silk PRIVATE -Wall -Wextra -Wpedantic -O2 -fstack-protector-strong)
@@ -159,13 +173,12 @@ endif()
 
 install(TARGETS qq-silk RUNTIME DESTINATION .)
 if(WIN32)
-    install(TARGETS wechat-voice wechat-record RUNTIME DESTINATION .)
+    install(TARGETS voice-converter-launcher wechat-voice wechat-record RUNTIME DESTINATION .)
 endif()
 install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/Convert-QQVoice.ps1"
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/Export-WeChatVoice.ps1"
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/QQ-Silk-Converter-GUI.ps1"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Start-VoiceConverter.vbs"
     "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
     DESTINATION .
