@@ -17,6 +17,36 @@ Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+
+function Invoke-LauncherSelfTest {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Path
+    )
+
+    $launcherStartInfo = New-Object Diagnostics.ProcessStartInfo
+    $launcherStartInfo.FileName = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path
+    $launcherStartInfo.Arguments = '--self-test'
+    $launcherStartInfo.UseShellExecute = $false
+    $launcherStartInfo.CreateNoWindow = $true
+    $launcherProcess = New-Object Diagnostics.Process
+    $launcherProcess.StartInfo = $launcherStartInfo
+    try {
+        if (-not $launcherProcess.Start()) {
+            throw 'Native GUI launcher self-test process did not start.'
+        }
+        if (-not $launcherProcess.WaitForExit(60000)) {
+            $launcherProcess.Kill()
+            throw 'Native GUI launcher self-test timed out after 60 seconds.'
+        }
+        if ($launcherProcess.ExitCode -ne 0) {
+            throw "Native GUI launcher self-test failed with exit code $($launcherProcess.ExitCode)."
+        }
+    }
+    finally {
+        $launcherProcess.Dispose()
+    }
+}
 $scripts = @(
     (Join-Path $root 'scripts\Convert-QQVoice.ps1'),
     (Join-Path $root 'scripts\Export-WeChatVoice.ps1'),
@@ -60,29 +90,7 @@ if ($selfTest.Mp3Qualities -ne '2,4,6') {
     throw 'GUI MP3-quality list is unexpected.'
 }
 
-$launcher = (Resolve-Path -LiteralPath $LauncherPath -ErrorAction Stop).Path
-$launcherStartInfo = New-Object Diagnostics.ProcessStartInfo
-$launcherStartInfo.FileName = $launcher
-$launcherStartInfo.Arguments = '--self-test'
-$launcherStartInfo.UseShellExecute = $false
-$launcherStartInfo.CreateNoWindow = $true
-$launcherProcess = New-Object Diagnostics.Process
-$launcherProcess.StartInfo = $launcherStartInfo
-try {
-    if (-not $launcherProcess.Start()) {
-        throw 'Native GUI launcher self-test process did not start.'
-    }
-    if (-not $launcherProcess.WaitForExit(60000)) {
-        $launcherProcess.Kill()
-        throw 'Native GUI launcher self-test timed out after 60 seconds.'
-    }
-    if ($launcherProcess.ExitCode -ne 0) {
-        throw "Native GUI launcher self-test failed with exit code $($launcherProcess.ExitCode)."
-    }
-}
-finally {
-    $launcherProcess.Dispose()
-}
+Invoke-LauncherSelfTest -Path $LauncherPath
 foreach ($obsoleteLauncher in @('Start-VoiceConverter.cmd', 'Start-VoiceConverter.vbs')) {
     if (Test-Path -LiteralPath (Join-Path $root $obsoleteLauncher)) {
         throw "The obsolete launcher must not be present: $obsoleteLauncher"
@@ -142,6 +150,8 @@ try {
     Copy-Item (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') $frontendPackage
     Copy-Item (Join-Path $root 'scripts\Convert-QQVoice.ps1') $frontendPackage
     Copy-Item (Join-Path $root 'scripts\Export-WeChatVoice.ps1') $frontendPackage
+    Copy-Item $DecoderPath (Join-Path $frontendPackage 'qq-silk.exe')
+    Copy-Item $LauncherPath (Join-Path $frontendPackage 'Start-VoiceConverter.exe')
     Copy-Item $WeChatExtractorPath (Join-Path $frontendPackage 'wechat-voice.exe')
     Copy-Item $WeChatRecorderPath (Join-Path $frontendPackage 'wechat-record.exe')
     $localFfmpeg = Join-Path $frontendPackage 'ffmpeg.exe'
@@ -154,6 +164,7 @@ try {
     if (-not $packagedSelfTest.FfmpegFound -or $packagedSelfTest.FfmpegPath -ne $localFfmpeg) {
         throw 'GUI did not automatically detect ffmpeg.exe next to the converter.'
     }
+    Invoke-LauncherSelfTest -Path (Join-Path $frontendPackage 'Start-VoiceConverter.exe')
     [IO.File]::WriteAllText(
         $mockFfmpeg,
         "@echo off`r`nsetlocal EnableExtensions`r`n> `"%QQ_SILK_FFMPEG_LOG%`" echo %*`r`nset `"last=`"`r`nfor %%A in (%*) do set `"last=%%~A`"`r`n> `"%last%`" echo ID3`r`nexit /b 0`r`n",
