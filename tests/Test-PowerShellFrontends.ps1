@@ -61,6 +61,9 @@ $generalLauncher = Get-Content -LiteralPath (Join-Path $root 'Start-VoiceConvert
 if ($generalLauncher -notmatch 'QQ-Silk-Converter-GUI\.ps1') {
     throw 'General GUI launcher does not reference the GUI script.'
 }
+if ($generalLauncher -notmatch 'scripts\\QQ-Silk-Converter-GUI\.ps1') {
+    throw 'General GUI launcher does not support the source-tree script layout.'
+}
 if (Test-Path -LiteralPath (Join-Path $root 'Start-QQSilkConverter.cmd')) {
     throw 'The obsolete duplicate launcher must not be present.'
 }
