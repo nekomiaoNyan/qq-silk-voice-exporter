@@ -29,6 +29,15 @@ try {
         [BitConverter]::ToUInt32($bytes, 42) -ne 160) {
         throw 'Recorder self-test WAV sizes were not finalized correctly.'
     }
+
+    $originalErrorPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & $recorder record-process not-a-pid (Join-Path $testDirectory 'must-not-exist.wav') 2>$null
+    $invalidPidExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $originalErrorPreference
+    if ($invalidPidExitCode -ne 2) {
+        throw "Recorder did not reject an invalid process ID with exit code 2. Actual: $invalidPidExitCode."
+    }
 }
 finally {
     if (Test-Path -LiteralPath $testDirectory) {

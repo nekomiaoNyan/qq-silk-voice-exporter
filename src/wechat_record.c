@@ -10,6 +10,41 @@
 #include <stdlib.h>
 #include <wchar.h>
 
+#if defined(__has_include)
+#if __has_include(<audioclientactivationparams.h>)
+#include <audioclientactivationparams.h>
+#define QQ_HAS_AUDIOCLIENT_ACTIVATION_PARAMS 1
+#endif
+#endif
+
+#ifndef QQ_HAS_AUDIOCLIENT_ACTIVATION_PARAMS
+typedef enum AUDIOCLIENT_ACTIVATION_TYPE {
+    AUDIOCLIENT_ACTIVATION_TYPE_DEFAULT = 0,
+    AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK = 1
+} AUDIOCLIENT_ACTIVATION_TYPE;
+
+typedef enum PROCESS_LOOPBACK_MODE {
+    PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE = 0,
+    PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE = 1
+} PROCESS_LOOPBACK_MODE;
+
+typedef struct AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
+    DWORD TargetProcessId;
+    PROCESS_LOOPBACK_MODE ProcessLoopbackMode;
+} AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS;
+
+typedef struct AUDIOCLIENT_ACTIVATION_PARAMS {
+    AUDIOCLIENT_ACTIVATION_TYPE ActivationType;
+    union {
+        AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS ProcessLoopbackParams;
+    } DUMMYUNIONNAME;
+} AUDIOCLIENT_ACTIVATION_PARAMS;
+#endif
+
+#ifndef VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK
+#define VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK L"VAD\\Process_Loopback"
+#endif
+
 static volatile LONG g_stop_requested = 0;
 
 typedef struct WavWriter {
@@ -168,15 +203,191 @@ static void print_hresult(const char *operation, HRESULT result) {
     fprintf(stderr, "%s failed (HRESULT 0x%08lx).\n", operation, (unsigned long)result);
 }
 
-static int record_loopback(const wchar_t *output_path, DWORD maximum_seconds) {
+typedef struct ActivationHandler {
+    IActivateAudioInterfaceCompletionHandler interface_value;
+    LONG reference_count;
+    HANDLE completed_event;
+    HRESULT activation_result;
+    IAudioClient *audio_client;
+    IUnknown *free_threaded_marshaler;
+} ActivationHandler;
+
+static ActivationHandler *activation_handler_from_interface(
+    IActivateAudioInterfaceCompletionHandler *interface_value) {
+    return CONTAINING_RECORD(interface_value, ActivationHandler, interface_value);
+}
+
+static HRESULT STDMETHODCALLTYPE activation_handler_query_interface(
+    IActivateAudioInterfaceCompletionHandler *interface_value,
+    REFIID interface_id,
+    void **object) {
+    ActivationHandler *handler = activation_handler_from_interface(interface_value);
+
+    if (object == NULL) {
+        return E_POINTER;
+    }
+    *object = NULL;
+    if (IsEqualIID(interface_id, &IID_IUnknown) ||
+        IsEqualIID(interface_id, &IID_IActivateAudioInterfaceCompletionHandler)) {
+        *object = interface_value;
+        (void)IActivateAudioInterfaceCompletionHandler_AddRef(interface_value);
+        return S_OK;
+    }
+    if (handler->free_threaded_marshaler != NULL) {
+        return IUnknown_QueryInterface(handler->free_threaded_marshaler,
+                                       interface_id, object);
+    }
+    return E_NOINTERFACE;
+}
+
+static ULONG STDMETHODCALLTYPE activation_handler_add_ref(
+    IActivateAudioInterfaceCompletionHandler *interface_value) {
+    ActivationHandler *handler = activation_handler_from_interface(interface_value);
+    return (ULONG)InterlockedIncrement(&handler->reference_count);
+}
+
+static ULONG STDMETHODCALLTYPE activation_handler_release(
+    IActivateAudioInterfaceCompletionHandler *interface_value) {
+    ActivationHandler *handler = activation_handler_from_interface(interface_value);
+    LONG remaining = InterlockedDecrement(&handler->reference_count);
+
+    if (remaining == 0) {
+        if (handler->audio_client != NULL) {
+            IAudioClient_Release(handler->audio_client);
+        }
+        if (handler->free_threaded_marshaler != NULL) {
+            IUnknown_Release(handler->free_threaded_marshaler);
+        }
+        if (handler->completed_event != NULL) {
+            CloseHandle(handler->completed_event);
+        }
+        HeapFree(GetProcessHeap(), 0, handler);
+    }
+    return (ULONG)remaining;
+}
+
+static HRESULT STDMETHODCALLTYPE activation_handler_completed(
+    IActivateAudioInterfaceCompletionHandler *interface_value,
+    IActivateAudioInterfaceAsyncOperation *operation) {
+    ActivationHandler *handler = activation_handler_from_interface(interface_value);
+    IUnknown *activated_interface = NULL;
+    HRESULT operation_result = E_UNEXPECTED;
+    HRESULT result;
+
+    result = IActivateAudioInterfaceAsyncOperation_GetActivateResult(
+        operation, &operation_result, &activated_interface);
+    if (SUCCEEDED(result)) {
+        result = operation_result;
+    }
+    if (SUCCEEDED(result)) {
+        result = IUnknown_QueryInterface(activated_interface, &IID_IAudioClient,
+                                         (void **)&handler->audio_client);
+    }
+    if (activated_interface != NULL) {
+        IUnknown_Release(activated_interface);
+    }
+    handler->activation_result = result;
+    SetEvent(handler->completed_event);
+    return S_OK;
+}
+
+static IActivateAudioInterfaceCompletionHandlerVtbl g_activation_handler_vtable = {
+    activation_handler_query_interface,
+    activation_handler_add_ref,
+    activation_handler_release,
+    activation_handler_completed
+};
+
+static ActivationHandler *activation_handler_create(void) {
+    ActivationHandler *handler = (ActivationHandler *)HeapAlloc(
+        GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*handler));
+    HRESULT result;
+
+    if (handler == NULL) {
+        return NULL;
+    }
+    handler->interface_value.lpVtbl = &g_activation_handler_vtable;
+    handler->reference_count = 1;
+    handler->activation_result = E_PENDING;
+    handler->completed_event = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (handler->completed_event == NULL) {
+        HeapFree(GetProcessHeap(), 0, handler);
+        return NULL;
+    }
+    result = CoCreateFreeThreadedMarshaler(
+        (IUnknown *)&handler->interface_value, &handler->free_threaded_marshaler);
+    if (FAILED(result)) {
+        CloseHandle(handler->completed_event);
+        HeapFree(GetProcessHeap(), 0, handler);
+        return NULL;
+    }
+    return handler;
+}
+
+static HRESULT activate_process_audio_client(DWORD process_id,
+                                               IAudioClient **audio_client) {
+    AUDIOCLIENT_ACTIVATION_PARAMS activation_parameters;
+    PROPVARIANT activation_variant;
+    ActivationHandler *handler = NULL;
+    IActivateAudioInterfaceAsyncOperation *operation = NULL;
+    HRESULT result;
+
+    *audio_client = NULL;
+    handler = activation_handler_create();
+    if (handler == NULL) {
+        return E_OUTOFMEMORY;
+    }
+
+    ZeroMemory(&activation_parameters, sizeof(activation_parameters));
+    activation_parameters.ActivationType = AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK;
+    activation_parameters.ProcessLoopbackParams.TargetProcessId = process_id;
+    activation_parameters.ProcessLoopbackParams.ProcessLoopbackMode =
+        PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE;
+
+    ZeroMemory(&activation_variant, sizeof(activation_variant));
+    activation_variant.vt = VT_BLOB;
+    activation_variant.blob.cbSize = sizeof(activation_parameters);
+    activation_variant.blob.pBlobData = (BYTE *)&activation_parameters;
+
+    result = ActivateAudioInterfaceAsync(
+        VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
+        &IID_IAudioClient,
+        &activation_variant,
+        &handler->interface_value,
+        &operation);
+    if (SUCCEEDED(result)) {
+        DWORD wait_result = WaitForSingleObject(handler->completed_event, INFINITE);
+        if (wait_result != WAIT_OBJECT_0) {
+            result = HRESULT_FROM_WIN32(GetLastError());
+        } else {
+            result = handler->activation_result;
+        }
+    }
+    if (operation != NULL) {
+        IActivateAudioInterfaceAsyncOperation_Release(operation);
+    }
+    if (SUCCEEDED(result) && handler->audio_client != NULL) {
+        *audio_client = handler->audio_client;
+        handler->audio_client = NULL;
+    } else if (SUCCEEDED(result)) {
+        result = E_UNEXPECTED;
+    }
+    IActivateAudioInterfaceCompletionHandler_Release(&handler->interface_value);
+    return result;
+}
+
+static int record_loopback(const wchar_t *output_path, DWORD maximum_seconds,
+                           DWORD process_id) {
     HRESULT result;
     IMMDeviceEnumerator *enumerator = NULL;
     IMMDevice *device = NULL;
     IAudioClient *audio_client = NULL;
     IAudioCaptureClient *capture_client = NULL;
     WAVEFORMATEX *mix_format = NULL;
+    WAVEFORMATEX process_format;
     WavWriter writer;
     ULONGLONG start_tick;
+    int free_mix_format = 0;
     int writer_open = 0;
     int started = 0;
     int ok = 0;
@@ -188,31 +399,55 @@ static int record_loopback(const wchar_t *output_path, DWORD maximum_seconds) {
         return 1;
     }
 
-    result = CoCreateInstance(&CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL,
-                              &IID_IMMDeviceEnumerator, (void **)&enumerator);
-    if (FAILED(result)) {
-        print_hresult("Create audio device enumerator", result);
-        goto cleanup;
+    if (process_id != 0) {
+        result = activate_process_audio_client(process_id, &audio_client);
+        if (FAILED(result)) {
+            print_hresult("Activate process-only loopback recording", result);
+            fputs("Process-only recording requires Windows build 20348 or later and a running target process.\n"
+                  "Select the system-audio compatibility mode if this Windows version does not support it.\n",
+                  stderr);
+            goto cleanup;
+        }
+        ZeroMemory(&process_format, sizeof(process_format));
+        process_format.wFormatTag = WAVE_FORMAT_PCM;
+        process_format.nChannels = 2;
+        process_format.nSamplesPerSec = 44100;
+        process_format.wBitsPerSample = 16;
+        process_format.nBlockAlign = 4;
+        process_format.nAvgBytesPerSec = 176400;
+        mix_format = &process_format;
+        result = IAudioClient_Initialize(
+            audio_client, AUDCLNT_SHAREMODE_SHARED,
+            AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
+            0, 0, mix_format, NULL);
+    } else {
+        result = CoCreateInstance(&CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL,
+                                  &IID_IMMDeviceEnumerator, (void **)&enumerator);
+        if (FAILED(result)) {
+            print_hresult("Create audio device enumerator", result);
+            goto cleanup;
+        }
+        result = IMMDeviceEnumerator_GetDefaultAudioEndpoint(enumerator, eRender, eConsole, &device);
+        if (FAILED(result)) {
+            print_hresult("Open default playback device", result);
+            goto cleanup;
+        }
+        result = IMMDevice_Activate(device, &IID_IAudioClient, CLSCTX_ALL, NULL,
+                                   (void **)&audio_client);
+        if (FAILED(result)) {
+            print_hresult("Activate Windows audio client", result);
+            goto cleanup;
+        }
+        result = IAudioClient_GetMixFormat(audio_client, &mix_format);
+        if (FAILED(result)) {
+            print_hresult("Read playback mix format", result);
+            goto cleanup;
+        }
+        free_mix_format = 1;
+        result = IAudioClient_Initialize(audio_client, AUDCLNT_SHAREMODE_SHARED,
+                                         AUDCLNT_STREAMFLAGS_LOOPBACK,
+                                         10000000, 0, mix_format, NULL);
     }
-    result = IMMDeviceEnumerator_GetDefaultAudioEndpoint(enumerator, eRender, eConsole, &device);
-    if (FAILED(result)) {
-        print_hresult("Open default playback device", result);
-        goto cleanup;
-    }
-    result = IMMDevice_Activate(device, &IID_IAudioClient, CLSCTX_ALL, NULL,
-                               (void **)&audio_client);
-    if (FAILED(result)) {
-        print_hresult("Activate Windows audio client", result);
-        goto cleanup;
-    }
-    result = IAudioClient_GetMixFormat(audio_client, &mix_format);
-    if (FAILED(result)) {
-        print_hresult("Read playback mix format", result);
-        goto cleanup;
-    }
-    result = IAudioClient_Initialize(audio_client, AUDCLNT_SHAREMODE_SHARED,
-                                     AUDCLNT_STREAMFLAGS_LOOPBACK,
-                                     10000000, 0, mix_format, NULL);
     if (FAILED(result)) {
         print_hresult("Initialize loopback recording", result);
         goto cleanup;
@@ -303,7 +538,7 @@ cleanup:
     if (capture_client != NULL) {
         IAudioCaptureClient_Release(capture_client);
     }
-    if (mix_format != NULL) {
+    if (free_mix_format && mix_format != NULL) {
         CoTaskMemFree(mix_format);
     }
     if (audio_client != NULL) {
@@ -353,40 +588,56 @@ static void usage(void) {
     fputws(L"WeChat playback recorder (local WASAPI loopback)\n\n"
            L"Usage:\n"
            L"  wechat-record.exe record <output.wav> [--seconds N]\n"
+           L"  wechat-record.exe record-process <pid> <output.wav> [--seconds N]\n"
            L"  wechat-record.exe self-test <output.wav>\n\n"
-           L"The recorder captures the system audio mix. Close other audio apps, start\n"
-           L"recording, play a voice message in WeChat, then press Enter to stop.\n"
+           L"record-process captures only the target process and its child processes on\n"
+           L"Windows build 20348 or later. record captures the complete system audio mix.\n"
+           L"Start recording, play a voice message in WeChat, then press Enter to stop.\n"
            L"It does not read WeChat files, databases, process memory, or encryption keys.\n",
            stderr);
 }
 
 int wmain(int argc, wchar_t **argv) {
     DWORD seconds = 0;
+    DWORD process_id = 0;
+    const wchar_t *output_path;
+    int option_index;
 
     if (argc == 3 && wcscmp(argv[1], L"self-test") == 0) {
         return self_test(argv[2]);
     }
-    if (argc != 3 && argc != 5) {
+    if (wcscmp(argv[1], L"record") == 0 && (argc == 3 || argc == 5)) {
+        output_path = argv[2];
+        option_index = 3;
+    } else if (wcscmp(argv[1], L"record-process") == 0 &&
+               (argc == 4 || argc == 6)) {
+        wchar_t *end = NULL;
+        unsigned long parsed = wcstoul(argv[2], &end, 10);
+        if (end == argv[2] || *end != L'\0' || parsed == 0 || parsed > UINT32_MAX) {
+            fputs("pid must be a positive 32-bit process ID.\n", stderr);
+            return 2;
+        }
+        process_id = (DWORD)parsed;
+        output_path = argv[3];
+        option_index = 4;
+    } else {
         usage();
         return 2;
     }
-    if (wcscmp(argv[1], L"record") != 0) {
-        usage();
-        return 2;
-    }
-    if (argc == 5) {
+    if (argc > option_index) {
         wchar_t *end = NULL;
         unsigned long parsed;
-        if (wcscmp(argv[3], L"--seconds") != 0) {
+        if (wcscmp(argv[option_index], L"--seconds") != 0) {
             usage();
             return 2;
         }
-        parsed = wcstoul(argv[4], &end, 10);
-        if (end == argv[4] || *end != L'\0' || parsed == 0 || parsed > 3600) {
+        parsed = wcstoul(argv[option_index + 1], &end, 10);
+        if (end == argv[option_index + 1] || *end != L'\0' ||
+            parsed == 0 || parsed > 3600) {
             fputs("--seconds must be between 1 and 3600.\n", stderr);
             return 2;
         }
         seconds = (DWORD)parsed;
     }
-    return record_loopback(argv[2], seconds);
+    return record_loopback(output_path, seconds, process_id);
 }

@@ -30,6 +30,13 @@ foreach ($scriptPath in $scripts) {
     }
 }
 
+$guiSource = Get-Content -LiteralPath (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') -Raw
+if ($guiSource -notmatch 'record-process' -or
+    $guiSource -notmatch 'WeChat only' -or
+    $guiSource -notmatch 'System audio') {
+    throw 'GUI does not expose process-only WeChat recording with an explicit system-audio fallback.'
+}
+
 $selfTest = & (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') `
     -SelfTest `
     -DecoderPath $DecoderPath `
