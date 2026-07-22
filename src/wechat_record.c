@@ -621,6 +621,10 @@ int wmain(int argc, wchar_t **argv) {
     const wchar_t *output_path;
     int option_index;
 
+    if (argc < 2) {
+        usage();
+        return 2;
+    }
     if (argc == 3 && wcscmp(argv[1], L"self-test") == 0) {
         return self_test(argv[2]);
     }

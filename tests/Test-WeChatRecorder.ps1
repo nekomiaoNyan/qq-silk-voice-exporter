@@ -32,6 +32,14 @@ try {
 
     $originalErrorPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
+    & $recorder 2>$null
+    $noArgumentsExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $originalErrorPreference
+    if ($noArgumentsExitCode -ne 2) {
+        throw "Recorder did not show usage and return exit code 2 when run without arguments. Actual: $noArgumentsExitCode."
+    }
+
+    $ErrorActionPreference = 'Continue'
     & $recorder record-process not-a-pid (Join-Path $testDirectory 'must-not-exist.wav') 2>$null
     $invalidPidExitCode = $LASTEXITCODE
     $ErrorActionPreference = $originalErrorPreference
