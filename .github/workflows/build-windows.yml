@@ -38,13 +38,23 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path dist/package | Out-Null
-          Copy-Item build/Release/qq-silk.exe dist/package/
+          New-Item -ItemType Directory -Path dist/package/bin | Out-Null
           Copy-Item build/Release/Start-VoiceConverter.exe dist/package/
-          Copy-Item build/Release/wechat-voice.exe dist/package/
-          Copy-Item build/Release/wechat-record.exe dist/package/
+          Copy-Item build/Release/qq-silk.exe dist/package/bin/
+          Copy-Item build/Release/wechat-voice.exe dist/package/bin/
+          Copy-Item build/Release/wechat-record.exe dist/package/bin/
           Copy-Item scripts/Convert-QQVoice.ps1,scripts/Export-WeChatVoice.ps1,scripts/QQ-Silk-Converter-GUI.ps1 dist/package/
           Copy-Item README.md,README.en.md,THIRD_PARTY_NOTICES.md,LICENSE dist/package/
           Copy-Item LICENSES dist/package/LICENSES -Recurse
+          $rootExecutables = @(Get-ChildItem dist/package -File -Filter *.exe)
+          if ($rootExecutables.Count -ne 1 -or $rootExecutables[0].Name -ne 'Start-VoiceConverter.exe') {
+            throw 'The package root must contain only Start-VoiceConverter.exe.'
+          }
+          $binExecutables = @(Get-ChildItem dist/package/bin -File -Filter *.exe | Sort-Object Name | ForEach-Object Name)
+          $expectedBinExecutables = @('qq-silk.exe', 'wechat-record.exe', 'wechat-voice.exe') | Sort-Object
+          if (@(Compare-Object $expectedBinExecutables $binExecutables).Count -ne 0) {
+            throw 'The package bin directory does not contain the expected command-line components.'
+          }
           $files = Get-ChildItem dist/package -File -Recurse | Sort-Object FullName
           $lines = foreach ($file in $files) {
             $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -52,17 +62,22 @@ jobs:
             "$hash  $relative"
           }
           $lines | Set-Content dist/package/SHA256SUMS.txt -Encoding ascii
-          Compress-Archive -Path dist/package/* -DestinationPath dist/qq-silk-windows-x64.zip
+          $versionMatch = Select-String -LiteralPath CMakeLists.txt -Pattern 'project\(qq_silk_exporter VERSION (?<version>[0-9]+\.[0-9]+\.[0-9]+)'
+          if (-not $versionMatch.Matches.Success) {
+            throw 'Could not read the project version from CMakeLists.txt.'
+          }
+          $version = $versionMatch.Matches[0].Groups['version'].Value
+          Compress-Archive -Path dist/package/* -DestinationPath "dist/QQ-WeChat-SILK-Voice-Converter-v$version-windows-x64.zip"
 
       - name: Attest build provenance
         if: github.event_name != 'pull_request'
         uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
         with:
-          subject-path: dist/qq-silk-windows-x64.zip
+          subject-path: dist/*.zip
 
       - name: Upload build artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: qq-silk-windows-x64
-          path: dist/qq-silk-windows-x64.zip
+          name: QQ-WeChat-SILK-Voice-Converter-windows-x64
+          path: dist/*.zip
           if-no-files-found: error

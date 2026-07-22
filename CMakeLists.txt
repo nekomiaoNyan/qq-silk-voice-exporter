@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 
 cmake_policy(SET CMP0091 NEW)
 
-project(qq_silk_exporter VERSION 1.3.0 LANGUAGES C)
+project(qq_silk_exporter VERSION 1.3.1 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -171,16 +171,20 @@ if(QQ_SILK_BUILD_TESTS)
     endif()
 endif()
 
-install(TARGETS qq-silk RUNTIME DESTINATION .)
 if(WIN32)
-    install(TARGETS voice-converter-launcher wechat-voice wechat-record RUNTIME DESTINATION .)
+    install(TARGETS voice-converter-launcher RUNTIME DESTINATION .)
+    install(TARGETS qq-silk wechat-voice wechat-record RUNTIME DESTINATION bin)
+else()
+    install(TARGETS qq-silk RUNTIME DESTINATION .)
 endif()
 install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/Convert-QQVoice.ps1"
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/Export-WeChatVoice.ps1"
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/QQ-Silk-Converter-GUI.ps1"
     "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/README.en.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
     DESTINATION .
 )
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/LICENSES" DESTINATION .)

@@ -1,8 +1,10 @@
-# QQ / WeChat SILK Voice Exporter
+# QQ / WeChat SILK Voice Converter
 
 English | [简体中文](README.md)
 
 Import and convert QQ SILK V3 voice messages on Windows. WeChat 4.x users can also record a voice while it is played, or read voice data from a **decrypted media-database copy**. This project contains auditable source code and a reproducible build workflow only. It does not include AutoIt, UPX, installers, self-extracting archives, telemetry, or network access.
+
+> **Simplest way to use it:** Download `QQ-WeChat-SILK-Voice-Converter-v1.3.1-windows-x64.zip` from [Releases](https://github.com/nekomiaoNyan/qq-silk-voice-exporter/releases/latest), **extract the complete ZIP**, and double-click **`Start-VoiceConverter.exe`** in the top-level folder. Regular users do not need to open `bin` or run any of the three command-line components inside it.
 
 ## Why this project exists
 
@@ -29,9 +31,11 @@ Unlike legacy Windows packages, this project deliberately avoids:
 
 Requirements: 64-bit Windows 10/11 and PowerShell 5.1 or later.
 
-1. Download `qq-silk-windows-x64.zip` from [Releases](https://github.com/nekomiaoNyan/qq-silk-voice-exporter/releases/latest). Regular users do not need a compiler.
-2. Extract every file and double-click the single launcher, `Start-VoiceConverter.exe`. It uses Windows' no-console process mode and shows only the converter GUI; startup failures are reported in a dialog.
+1. Download `QQ-WeChat-SILK-Voice-Converter-v1.3.1-windows-x64.zip` from [Releases](https://github.com/nekomiaoNyan/qq-silk-voice-exporter/releases/latest). Regular users do not need a compiler.
+2. Extract the complete ZIP and double-click the only program users need to open in the top-level folder: `Start-VoiceConverter.exe`. It shows only the converter GUI without a black CMD window; startup failures are reported in a dialog.
 3. For QQ, click **Files** or drag files/folders into the window. For WeChat, click **WeChat**, then choose **Record playback** (recommended) or **Decrypted DB** (advanced).
+
+The package root contains one program entry point, `Start-VoiceConverter.exe`. The `qq-silk.exe`, `wechat-record.exe`, and `wechat-voice.exe` files under `bin` are command-line components launched automatically by the GUI; regular users do not need to run them directly.
 
 The graphical interface supports:
 
@@ -93,10 +97,10 @@ The playback recorder can also be used directly. The first command captures only
 
 ```powershell
 $wechat = Get-Process Weixin | Where-Object MainWindowHandle -ne 0 | Select-Object -First 1
-.\wechat-record.exe record-process $wechat.Id 'D:\WeChat Voice\wechat-only.wav'
+.\bin\wechat-record.exe record-process $wechat.Id 'D:\WeChat Voice\wechat-only.wav'
 
 # Compatibility only on systems without process loopback:
-.\wechat-record.exe record 'D:\WeChat Voice\wechat-voice.wav'
+.\bin\wechat-record.exe record 'D:\WeChat Voice\wechat-voice.wav'
 ```
 
 Command-line extraction:
@@ -113,8 +117,8 @@ Command-line extraction:
 The native checker/extractor can also be used directly:
 
 ```powershell
-.\wechat-voice.exe check 'D:\WeChat database copy\media_0.db'
-.\wechat-voice.exe export 'D:\WeChat database copy\media_0.db' 'D:\WeChat Voice\Raw' --limit 1000
+.\bin\wechat-voice.exe check 'D:\WeChat database copy\media_0.db'
+.\bin\wechat-voice.exe export 'D:\WeChat database copy\media_0.db' 'D:\WeChat Voice\Raw' --limit 1000
 ```
 
 Changing the output sample rate cannot restore quality that was not present in the source. MP3 still requires FFmpeg from a source you trust.
@@ -161,8 +165,8 @@ The FFmpeg project does not directly distribute Windows executables. Its [offici
 ## Use the decoder directly
 
 ```powershell
-.\qq-silk.exe 'input.amr' 'output.wav'
-.\qq-silk.exe 'input.slk' 'output.wav' --sample-rate 24000
+.\bin\qq-silk.exe 'input.amr' 'output.wav'
+.\bin\qq-silk.exe 'input.slk' 'output.wav' --sample-rate 24000
 ```
 
 The decoder accepts both Tencent's `0x02` prefix and a standard `#!SILK_V3` header. WAV output is limited to about 4 GiB. Oversized, truncated, malformed, or decoder-rejected input causes an error, and any incomplete output is removed.
@@ -198,14 +202,15 @@ Remove-Item Env:QQ_SILK_TEST_INPUT
 Every release archive includes `SHA256SUMS.txt` for its contents:
 
 ```powershell
-Get-FileHash .\qq-silk.exe -Algorithm SHA256
+Get-FileHash .\Start-VoiceConverter.exe -Algorithm SHA256
+Get-FileHash .\bin\qq-silk.exe -Algorithm SHA256
 Get-Content .\SHA256SUMS.txt
 ```
 
 Non-PR builds of this public repository also receive a GitHub artifact attestation that binds the ZIP archive to the repository, commit, and workflow:
 
 ```powershell
-gh attestation verify .\qq-silk-windows-x64.zip --repo nekomiaoNyan/qq-silk-voice-exporter
+gh attestation verify .\QQ-WeChat-SILK-Voice-Converter-v1.3.1-windows-x64.zip --repo nekomiaoNyan/qq-silk-voice-exporter
 ```
 
 Build provenance improves supply-chain transparency, but does not by itself prove that code is perfectly secure.
@@ -213,7 +218,7 @@ Build provenance improves supply-chain transparency, but does not by itself prov
 Optional local Microsoft Defender scan:
 
 ```powershell
-Start-MpScan -ScanType CustomScan -ScanPath (Resolve-Path .\qq-silk.exe)
+Start-MpScan -ScanType CustomScan -ScanPath (Resolve-Path .\Start-VoiceConverter.exe)
 ```
 
 If Defender identifies the file as malware, submit it to [Microsoft Security Intelligence for analysis](https://www.microsoft.com/wdsi/filesubmission). If SmartScreen only reports an unrecognized app, that is usually a download-reputation or code-signing issue. Stable reputation generally requires trusted code signing or Microsoft Store distribution.

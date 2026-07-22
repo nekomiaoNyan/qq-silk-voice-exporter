@@ -30,6 +30,7 @@ function Resolve-WeChatExtractor {
     }
 
     $candidates = @(
+        (Join-Path $PSScriptRoot 'bin\wechat-voice.exe'),
         (Join-Path $PSScriptRoot 'wechat-voice.exe'),
         (Join-Path $PSScriptRoot '..\wechat-voice.exe'),
         (Join-Path $PSScriptRoot '..\build\Release\wechat-voice.exe'),
@@ -40,7 +41,7 @@ function Resolve-WeChatExtractor {
             return (Resolve-Path -LiteralPath $candidate).Path
         }
     }
-    throw 'wechat-voice.exe was not found next to the script or in the build directory.'
+    throw 'wechat-voice.exe was not found in the package bin directory or build directory. Re-extract the complete Release ZIP or use -ExtractorPath.'
 }
 
 function ConvertTo-UnixSeconds {
