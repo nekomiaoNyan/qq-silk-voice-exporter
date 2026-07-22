@@ -4,13 +4,49 @@ param(
     [string] $DecoderPath,
 
     [Parameter(Mandatory)]
-    [string] $WeChatExtractorPath
+    [string] $WeChatExtractorPath,
+
+    [Parameter(Mandatory)]
+    [string] $WeChatRecorderPath,
+
+    [Parameter(Mandatory)]
+    [string] $LauncherPath
 )
 
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+
+function Invoke-LauncherSelfTest {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Path
+    )
+
+    $launcherStartInfo = New-Object Diagnostics.ProcessStartInfo
+    $launcherStartInfo.FileName = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path
+    $launcherStartInfo.Arguments = '--self-test'
+    $launcherStartInfo.UseShellExecute = $false
+    $launcherStartInfo.CreateNoWindow = $true
+    $launcherProcess = New-Object Diagnostics.Process
+    $launcherProcess.StartInfo = $launcherStartInfo
+    try {
+        if (-not $launcherProcess.Start()) {
+            throw 'Native GUI launcher self-test process did not start.'
+        }
+        if (-not $launcherProcess.WaitForExit(60000)) {
+            $launcherProcess.Kill()
+            throw 'Native GUI launcher self-test timed out after 60 seconds.'
+        }
+        if ($launcherProcess.ExitCode -ne 0) {
+            throw "Native GUI launcher self-test failed with exit code $($launcherProcess.ExitCode)."
+        }
+    }
+    finally {
+        $launcherProcess.Dispose()
+    }
+}
 $scripts = @(
     (Join-Path $root 'scripts\Convert-QQVoice.ps1'),
     (Join-Path $root 'scripts\Export-WeChatVoice.ps1'),
@@ -27,15 +63,24 @@ foreach ($scriptPath in $scripts) {
     }
 }
 
+$guiSource = Get-Content -LiteralPath (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') -Raw
+if ($guiSource -notmatch 'record-process' -or
+    $guiSource -notmatch 'WeChat only' -or
+    $guiSource -notmatch 'System audio') {
+    throw 'GUI does not expose process-only WeChat recording with an explicit system-audio fallback.'
+}
+
 $selfTest = & (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') `
     -SelfTest `
     -DecoderPath $DecoderPath `
-    -WeChatExtractorPath $WeChatExtractorPath
+    -WeChatExtractorPath $WeChatExtractorPath `
+    -WeChatRecorderPath $WeChatRecorderPath
 if (-not $selfTest.GuiAssembliesLoaded -or
     -not $selfTest.BatchScriptFound -or
     -not $selfTest.WeChatScriptFound -or
     -not $selfTest.DecoderFound -or
-    -not $selfTest.WeChatExtractorFound) {
+    -not $selfTest.WeChatExtractorFound -or
+    -not $selfTest.WeChatRecorderFound) {
     throw 'GUI self-test failed.'
 }
 if ($selfTest.SampleRates -ne '8000,12000,16000,24000,32000,44100,48000') {
@@ -45,12 +90,11 @@ if ($selfTest.Mp3Qualities -ne '2,4,6') {
     throw 'GUI MP3-quality list is unexpected.'
 }
 
-$generalLauncher = Get-Content -LiteralPath (Join-Path $root 'Start-VoiceConverter.cmd') -Raw
-if ($generalLauncher -notmatch 'QQ-Silk-Converter-GUI\.ps1') {
-    throw 'General GUI launcher does not reference the GUI script.'
-}
-if (Test-Path -LiteralPath (Join-Path $root 'Start-QQSilkConverter.cmd')) {
-    throw 'The obsolete duplicate launcher must not be present.'
+Invoke-LauncherSelfTest -Path $LauncherPath
+foreach ($obsoleteLauncher in @('Start-VoiceConverter.cmd', 'Start-VoiceConverter.vbs')) {
+    if (Test-Path -LiteralPath (Join-Path $root $obsoleteLauncher)) {
+        throw "The obsolete launcher must not be present: $obsoleteLauncher"
+    }
 }
 
 $testDirectory = Join-Path ([IO.Path]::GetTempPath()) ('qq-silk-frontend-test-' + [Guid]::NewGuid().ToString('N'))
@@ -69,6 +113,22 @@ try {
         $inputFile,
         [byte[]](0x02, 0x23, 0x21, 0x53, 0x49, 0x4c, 0x4b, 0x5f, 0x56, 0x33)
     )
+    $encryptedDatabase = Join-Path $testDirectory 'encrypted-media.db'
+    [IO.File]::WriteAllBytes($encryptedDatabase, [Text.Encoding]::ASCII.GetBytes('not a database'))
+    try {
+        & (Join-Path $root 'scripts\Export-WeChatVoice.ps1') `
+            -DatabasePath $encryptedDatabase `
+            -OutputPath (Join-Path $testDirectory 'unused raw output') `
+            -ExtractorPath $WeChatExtractorPath `
+            -Force
+        throw 'The encrypted-database test unexpectedly succeeded.'
+    }
+    catch {
+        if ($_.Exception.Message -notmatch 'Record playback' -or
+            $_.Exception.Message -notmatch 'does not scan Weixin\.exe') {
+            throw 'The encrypted-database error is not actionable or does not explain the privacy boundary.'
+        }
+    }
     [IO.File]::WriteAllText(
         $mockDecoder,
         "@echo off`r`n> `"%QQ_SILK_DECODER_LOG%`" echo %*`r`n> %2 echo RIFF`r`nexit /b 0`r`n",
@@ -81,7 +141,8 @@ try {
     $pathSelfTest = & (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') `
         -SelfTest `
         -DecoderPath $DecoderPath `
-        -WeChatExtractorPath $WeChatExtractorPath
+        -WeChatExtractorPath $WeChatExtractorPath `
+        -WeChatRecorderPath $WeChatRecorderPath
     if (-not $pathSelfTest.FfmpegFound -or $pathSelfTest.FfmpegPath -ne $pathFfmpeg) {
         throw 'GUI did not automatically detect ffmpeg.exe on PATH.'
     }
@@ -89,16 +150,21 @@ try {
     Copy-Item (Join-Path $root 'scripts\QQ-Silk-Converter-GUI.ps1') $frontendPackage
     Copy-Item (Join-Path $root 'scripts\Convert-QQVoice.ps1') $frontendPackage
     Copy-Item (Join-Path $root 'scripts\Export-WeChatVoice.ps1') $frontendPackage
+    Copy-Item $DecoderPath (Join-Path $frontendPackage 'qq-silk.exe')
+    Copy-Item $LauncherPath (Join-Path $frontendPackage 'Start-VoiceConverter.exe')
     Copy-Item $WeChatExtractorPath (Join-Path $frontendPackage 'wechat-voice.exe')
+    Copy-Item $WeChatRecorderPath (Join-Path $frontendPackage 'wechat-record.exe')
     $localFfmpeg = Join-Path $frontendPackage 'ffmpeg.exe'
     [IO.File]::WriteAllBytes($localFfmpeg, [byte[]](0x4d, 0x5a))
     $packagedSelfTest = & (Join-Path $frontendPackage 'QQ-Silk-Converter-GUI.ps1') `
         -SelfTest `
         -DecoderPath $DecoderPath `
-        -WeChatExtractorPath (Join-Path $frontendPackage 'wechat-voice.exe')
+        -WeChatExtractorPath (Join-Path $frontendPackage 'wechat-voice.exe') `
+        -WeChatRecorderPath (Join-Path $frontendPackage 'wechat-record.exe')
     if (-not $packagedSelfTest.FfmpegFound -or $packagedSelfTest.FfmpegPath -ne $localFfmpeg) {
         throw 'GUI did not automatically detect ffmpeg.exe next to the converter.'
     }
+    Invoke-LauncherSelfTest -Path (Join-Path $frontendPackage 'Start-VoiceConverter.exe')
     [IO.File]::WriteAllText(
         $mockFfmpeg,
         "@echo off`r`nsetlocal EnableExtensions`r`n> `"%QQ_SILK_FFMPEG_LOG%`" echo %*`r`nset `"last=`"`r`nfor %%A in (%*) do set `"last=%%~A`"`r`n> `"%last%`" echo ID3`r`nexit /b 0`r`n",

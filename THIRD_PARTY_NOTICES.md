@@ -17,3 +17,5 @@ No upstream Windows executable, AutoIt source, shell converter, FFmpeg binary, o
 ## Windows system SQLite
 
 `wechat-voice.exe` dynamically loads the `winsqlite3.dll` component supplied by Windows. The repository and release packages do not bundle a SQLite DLL, SQLCipher binary, or database decryption tool.
+
+`wechat-record.exe` uses the Windows Core Audio (WASAPI) interfaces supplied by the operating system. It does not bundle an audio-capture library or access WeChat process memory.

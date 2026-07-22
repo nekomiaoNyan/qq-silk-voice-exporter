@@ -3,6 +3,7 @@ param(
     [switch] $SelfTest,
     [string] $DecoderPath,
     [string] $WeChatExtractorPath,
+    [string] $WeChatRecorderPath,
     [string] $RenderPath
 )
 
@@ -73,6 +74,27 @@ function Resolve-GuiWeChatExtractor {
     throw 'wechat-voice.exe was not found next to the GUI script.'
 }
 
+function Resolve-GuiWeChatRecorder {
+    param([string] $RequestedPath)
+
+    if ($RequestedPath) {
+        return (Resolve-Path -LiteralPath $RequestedPath -ErrorAction Stop).Path
+    }
+
+    $candidates = @(
+        (Join-Path $PSScriptRoot 'wechat-record.exe'),
+        (Join-Path $PSScriptRoot '..\wechat-record.exe'),
+        (Join-Path $PSScriptRoot '..\build\Release\wechat-record.exe'),
+        (Join-Path $PSScriptRoot '..\build\wechat-record.exe')
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+    throw 'wechat-record.exe was not found next to the GUI script.'
+}
+
 function Resolve-GuiFfmpeg {
     $localCandidates = @(
         (Join-Path $PSScriptRoot 'ffmpeg.exe'),
@@ -131,6 +153,7 @@ $script:batchScript = Resolve-CompanionFile -Name 'Convert-QQVoice.ps1'
 $script:weChatExportScript = Resolve-CompanionFile -Name 'Export-WeChatVoice.ps1'
 $script:decoder = Resolve-GuiDecoder -RequestedPath $DecoderPath
 $script:weChatExtractor = Resolve-GuiWeChatExtractor -RequestedPath $WeChatExtractorPath
+$script:weChatRecorder = Resolve-GuiWeChatRecorder -RequestedPath $WeChatRecorderPath
 $script:defaultFfmpeg = Resolve-GuiFfmpeg
 $script:supportedExtensions = @('.amr', '.slk', '.silk', '.aud')
 $script:supportedRates = @(8000, 12000, 16000, 24000, 32000, 44100, 48000)
@@ -142,6 +165,7 @@ if ($SelfTest) {
         WeChatScriptFound = Test-Path -LiteralPath $script:weChatExportScript -PathType Leaf
         DecoderFound = Test-Path -LiteralPath $script:decoder -PathType Leaf
         WeChatExtractorFound = Test-Path -LiteralPath $script:weChatExtractor -PathType Leaf
+        WeChatRecorderFound = Test-Path -LiteralPath $script:weChatRecorder -PathType Leaf
         SampleRates = $script:supportedRates -join ','
         Mp3Qualities = '2,4,6'
         FfmpegFound = [bool]$script:defaultFfmpeg
@@ -171,7 +195,7 @@ $titleLabel.AutoSize = $true
 $form.Controls.Add($titleLabel)
 
 $subtitleLabel = New-Object Windows.Forms.Label
-$subtitleLabel.Text = '导入 QQ 语音文件或已解密的微信媒体库，然后直接转换 / Import QQ files or a decrypted WeChat media database.'
+$subtitleLabel.Text = '转换 QQ/旧版微信 SILK；新版微信可播放录音 / Convert SILK files or record WeChat playback.'
 $subtitleLabel.ForeColor = [Drawing.Color]::FromArgb(90, 100, 115)
 $subtitleLabel.Location = New-Object Drawing.Point(20, 51)
 $subtitleLabel.AutoSize = $true
@@ -199,7 +223,7 @@ $addFolderButton.AutoEllipsis = $true
 $inputGroup.Controls.Add($addFolderButton)
 
 $weChatDatabaseButton = New-Object Windows.Forms.Button
-$weChatDatabaseButton.Text = '微信 DB / WeChat'
+$weChatDatabaseButton.Text = '微信语音 / WeChat'
 $weChatDatabaseButton.Location = New-Object Drawing.Point(264, 28)
 $weChatDatabaseButton.Size = New-Object Drawing.Size(155, 32)
 $weChatDatabaseButton.AutoEllipsis = $true
@@ -258,7 +282,7 @@ $locationHint.AutoSize = $true
 $inputGroup.Controls.Add($locationHint)
 
 $dateHint = New-Object Windows.Forms.Label
-$dateHint.Text = '微信 3.x：...\FileStorage\MsgAttach\...\Audio\YYYY-MM（.aud 直接添加）；4.x：导入已解密 media_*.db'
+$dateHint.Text = '微信 3.x：添加 .aud；微信 4.x：点“微信语音”后播放录音（推荐），或导入已解密 DB'
 $dateHint.ForeColor = [Drawing.Color]::FromArgb(95, 105, 120)
 $dateHint.Location = New-Object Drawing.Point(17, 277)
 $dateHint.AutoSize = $true
@@ -482,6 +506,456 @@ function Add-GuiPath {
     }
     else {
         Add-GuiFile -Path $Path
+    }
+}
+
+function Show-WeChatSourceDialog {
+    $dialogForm = New-Object Windows.Forms.Form
+    $dialogForm.Text = '微信语音 / WeChat voices'
+    $dialogForm.StartPosition = 'CenterParent'
+    $dialogForm.ClientSize = New-Object Drawing.Size(680, 365)
+    $dialogForm.FormBorderStyle = 'FixedDialog'
+    $dialogForm.MaximizeBox = $false
+    $dialogForm.MinimizeBox = $false
+    $dialogForm.Font = New-Object Drawing.Font('Microsoft YaHei UI', 9)
+
+    $title = New-Object Windows.Forms.Label
+    $title.Text = '微信 4.x 怎么处理？ / Choose a WeChat 4.x method'
+    $title.Font = New-Object Drawing.Font('Microsoft YaHei UI', 13, [Drawing.FontStyle]::Bold)
+    $title.Location = New-Object Drawing.Point(20, 18)
+    $title.AutoSize = $true
+    $dialogForm.Controls.Add($title)
+
+    $intro = New-Object Windows.Forms.Label
+    $intro.Text = '新版微信的官方 media_*.db 通常已加密，不能像普通音频文件一样直接转换。请选择一种方式：'
+    $intro.Location = New-Object Drawing.Point(22, 58)
+    $intro.Size = New-Object Drawing.Size(635, 38)
+    $dialogForm.Controls.Add($intro)
+
+    $recordButton = New-Object Windows.Forms.Button
+    $recordButton.Text = '播放录音（推荐） / Record playback'
+    $recordButton.Location = New-Object Drawing.Point(22, 105)
+    $recordButton.Size = New-Object Drawing.Size(300, 55)
+    $recordButton.Font = New-Object Drawing.Font('Microsoft YaHei UI', 10, [Drawing.FontStyle]::Bold)
+    $dialogForm.Controls.Add($recordButton)
+
+    $recordHelp = New-Object Windows.Forms.Label
+    $recordHelp.Text = '在微信里播放目标语音，默认只把微信及其子进程的声音保存为 WAV。不读取微信数据库或密钥。'
+    $recordHelp.Location = New-Object Drawing.Point(24, 168)
+    $recordHelp.Size = New-Object Drawing.Size(295, 58)
+    $recordHelp.ForeColor = [Drawing.Color]::FromArgb(70, 82, 98)
+    $dialogForm.Controls.Add($recordHelp)
+
+    $databaseButton = New-Object Windows.Forms.Button
+    $databaseButton.Text = '已解密 DB（高级） / Decrypted DB'
+    $databaseButton.Location = New-Object Drawing.Point(352, 105)
+    $databaseButton.Size = New-Object Drawing.Size(305, 55)
+    $dialogForm.Controls.Add($databaseButton)
+
+    $databaseHelp = New-Object Windows.Forms.Label
+    $databaseHelp.Text = '仅适合已经合法取得 SQLite 副本的用户。官方仍加密的 media_*.db 会被拒绝，且不会被修改。'
+    $databaseHelp.Location = New-Object Drawing.Point(354, 168)
+    $databaseHelp.Size = New-Object Drawing.Size(300, 58)
+    $databaseHelp.ForeColor = [Drawing.Color]::FromArgb(70, 82, 98)
+    $dialogForm.Controls.Add($databaseHelp)
+
+    $privacy = New-Object Windows.Forms.Label
+    $privacy.Text = '隐私提示：所有处理都在本机完成。不要把语音、数据库、密钥、账号目录或含联系人信息的截图上传到公开仓库或 Issue。'
+    $privacy.Location = New-Object Drawing.Point(22, 245)
+    $privacy.Size = New-Object Drawing.Size(635, 48)
+    $privacy.ForeColor = [Drawing.Color]::FromArgb(125, 78, 25)
+    $dialogForm.Controls.Add($privacy)
+
+    $cancelButton = New-Object Windows.Forms.Button
+    $cancelButton.Text = '取消 / Cancel'
+    $cancelButton.Location = New-Object Drawing.Point(532, 312)
+    $cancelButton.Size = New-Object Drawing.Size(125, 34)
+    $cancelButton.DialogResult = [Windows.Forms.DialogResult]::Cancel
+    $dialogForm.Controls.Add($cancelButton)
+
+    $recordButton.Add_Click({
+        $dialogForm.Tag = 'record'
+        $dialogForm.DialogResult = [Windows.Forms.DialogResult]::OK
+        $dialogForm.Close()
+    })
+    $databaseButton.Add_Click({
+        $dialogForm.Tag = 'database'
+        $dialogForm.DialogResult = [Windows.Forms.DialogResult]::OK
+        $dialogForm.Close()
+    })
+    $dialogForm.CancelButton = $cancelButton
+    try {
+        if ($dialogForm.ShowDialog($form) -eq [Windows.Forms.DialogResult]::OK) {
+            return [string]$dialogForm.Tag
+        }
+        return $null
+    }
+    finally {
+        $dialogForm.Dispose()
+    }
+}
+
+function Show-WeChatRecorderDialog {
+    $dialogForm = New-Object Windows.Forms.Form
+    $dialogForm.Text = '微信播放录音 / Record WeChat playback'
+    $dialogForm.StartPosition = 'CenterParent'
+    $dialogForm.ClientSize = New-Object Drawing.Size(700, 500)
+    $dialogForm.FormBorderStyle = 'FixedDialog'
+    $dialogForm.MaximizeBox = $false
+    $dialogForm.MinimizeBox = $false
+    $dialogForm.Font = New-Object Drawing.Font('Microsoft YaHei UI', 9)
+
+    $title = New-Object Windows.Forms.Label
+    $title.Text = '录制微信正在播放的语音'
+    $title.Font = New-Object Drawing.Font('Microsoft YaHei UI', 13, [Drawing.FontStyle]::Bold)
+    $title.Location = New-Object Drawing.Point(20, 17)
+    $title.AutoSize = $true
+    $dialogForm.Controls.Add($title)
+
+    $steps = New-Object Windows.Forms.Label
+    $steps.Text = @'
+1. 先启动并登录微信；默认仅录制微信及其子进程的声音。
+2. 点击“开始录音”，再回到微信播放一条语音。
+3. 播放结束后回到这里点击“停止并保存”。
+'@
+    $steps.Location = New-Object Drawing.Point(22, 55)
+    $steps.Size = New-Object Drawing.Size(650, 72)
+    $dialogForm.Controls.Add($steps)
+
+    $scopeLabel = New-Object Windows.Forms.Label
+    $scopeLabel.Text = '录音范围 / Capture'
+    $scopeLabel.Location = New-Object Drawing.Point(22, 135)
+    $scopeLabel.AutoSize = $true
+    $dialogForm.Controls.Add($scopeLabel)
+
+    $scopeCombo = New-Object Windows.Forms.ComboBox
+    $scopeCombo.DropDownStyle = [Windows.Forms.ComboBoxStyle]::DropDownList
+    $scopeCombo.Location = New-Object Drawing.Point(168, 131)
+    $scopeCombo.Size = New-Object Drawing.Size(509, 27)
+    [void] $scopeCombo.Items.Add('仅微信及子进程（推荐） / WeChat only')
+    [void] $scopeCombo.Items.Add('全部系统声音（旧系统兼容） / System audio')
+    $scopeCombo.SelectedIndex = 0
+    $dialogForm.Controls.Add($scopeCombo)
+
+    $warning = New-Object Windows.Forms.Label
+    $warning.Text = '仅微信模式不会录入其他应用的声音；需要 Windows Build 20348 或更高版本。请只录制你有权保存的内容。'
+    $warning.Location = New-Object Drawing.Point(22, 169)
+    $warning.Size = New-Object Drawing.Size(650, 42)
+    $warning.ForeColor = [Drawing.Color]::FromArgb(125, 78, 25)
+    $dialogForm.Controls.Add($warning)
+
+    $outputLabel = New-Object Windows.Forms.Label
+    $outputLabel.Text = '保存为 / Save as'
+    $outputLabel.Location = New-Object Drawing.Point(22, 222)
+    $outputLabel.AutoSize = $true
+    $dialogForm.Controls.Add($outputLabel)
+
+    $outputText = New-Object Windows.Forms.TextBox
+    $recordingDirectory = Join-Path (Join-Path $documents 'WeChat Voice Export') 'Recorded'
+    $outputText.Text = Join-Path $recordingDirectory ("wechat-{0}.wav" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    $outputText.Location = New-Object Drawing.Point(145, 218)
+    $outputText.Size = New-Object Drawing.Size(410, 25)
+    $dialogForm.Controls.Add($outputText)
+
+    $browseButton = New-Object Windows.Forms.Button
+    $browseButton.Text = '浏览 / Browse'
+    $browseButton.Location = New-Object Drawing.Point(565, 215)
+    $browseButton.Size = New-Object Drawing.Size(112, 31)
+    $dialogForm.Controls.Add($browseButton)
+
+    $statusLabel = New-Object Windows.Forms.Label
+    $statusLabel.Text = '尚未开始 / Ready'
+    $statusLabel.Location = New-Object Drawing.Point(22, 266)
+    $statusLabel.Size = New-Object Drawing.Size(650, 28)
+    $statusLabel.Font = New-Object Drawing.Font('Microsoft YaHei UI', 10, [Drawing.FontStyle]::Bold)
+    $dialogForm.Controls.Add($statusLabel)
+
+    $startButton = New-Object Windows.Forms.Button
+    $startButton.Text = '开始录音 / Start'
+    $startButton.Location = New-Object Drawing.Point(22, 311)
+    $startButton.Size = New-Object Drawing.Size(185, 48)
+    $startButton.BackColor = [Drawing.Color]::FromArgb(0, 120, 215)
+    $startButton.ForeColor = [Drawing.Color]::White
+    $startButton.FlatStyle = 'Flat'
+    $startButton.Font = New-Object Drawing.Font('Microsoft YaHei UI', 10, [Drawing.FontStyle]::Bold)
+    $dialogForm.Controls.Add($startButton)
+
+    $stopButton = New-Object Windows.Forms.Button
+    $stopButton.Text = '停止并保存 / Stop'
+    $stopButton.Location = New-Object Drawing.Point(217, 311)
+    $stopButton.Size = New-Object Drawing.Size(185, 48)
+    $stopButton.Enabled = $false
+    $dialogForm.Controls.Add($stopButton)
+
+    $openButton = New-Object Windows.Forms.Button
+    $openButton.Text = '打开保存目录 / Open folder'
+    $openButton.Location = New-Object Drawing.Point(412, 311)
+    $openButton.Size = New-Object Drawing.Size(265, 48)
+    $dialogForm.Controls.Add($openButton)
+
+    $privacyLabel = New-Object Windows.Forms.Label
+    $privacyLabel.Text = '只读取微信进程 ID 来限定声音范围；不会扫描进程内存、读取聊天数据库、提取密钥、联网或上传文件。'
+    $privacyLabel.Location = New-Object Drawing.Point(22, 380)
+    $privacyLabel.Size = New-Object Drawing.Size(650, 45)
+    $privacyLabel.ForeColor = [Drawing.Color]::FromArgb(70, 105, 80)
+    $dialogForm.Controls.Add($privacyLabel)
+
+    $closeButton = New-Object Windows.Forms.Button
+    $closeButton.Text = '关闭 / Close'
+    $closeButton.Location = New-Object Drawing.Point(552, 449)
+    $closeButton.Size = New-Object Drawing.Size(125, 34)
+    $closeButton.DialogResult = [Windows.Forms.DialogResult]::Cancel
+    $dialogForm.Controls.Add($closeButton)
+    $dialogForm.CancelButton = $closeButton
+
+    $state = @{
+        Process = $null
+        OutputPath = $null
+        StopRequested = $false
+        CloseWhenStopped = $false
+    }
+
+    $recordTimer = New-Object Windows.Forms.Timer
+    $recordTimer.Interval = 200
+    $recordTimer.Add_Tick({
+        if (-not $state.Process -or -not $state.Process.HasExited) {
+            return
+        }
+
+        $stdout = $state.Process.StandardOutput.ReadToEnd().Trim()
+        $stderr = $state.Process.StandardError.ReadToEnd().Trim()
+        $exitCode = $state.Process.ExitCode
+        $state.Process.Dispose()
+        $state.Process = $null
+        $startButton.Enabled = $true
+        $stopButton.Enabled = $false
+        $outputText.Enabled = $true
+        $browseButton.Enabled = $true
+        $scopeCombo.Enabled = $true
+        $closeButton.Enabled = $true
+
+        if ($exitCode -eq 0 -and $state.OutputPath -and (Test-Path -LiteralPath $state.OutputPath -PathType Leaf)) {
+            $statusLabel.Text = '已停止并保存 / Saved'
+            $statusLabel.ForeColor = [Drawing.Color]::FromArgb(25, 115, 65)
+            Write-GuiLog "微信播放录音已保存 / Recording saved: $($state.OutputPath)"
+            if (-not $state.CloseWhenStopped) {
+                [void] [Windows.Forms.MessageBox]::Show(
+                    $dialogForm,
+                    "录音已保存：`r`n$($state.OutputPath)",
+                    '微信播放录音 / WeChat playback recording',
+                    [Windows.Forms.MessageBoxButtons]::OK,
+                    [Windows.Forms.MessageBoxIcon]::Information
+                )
+            }
+        }
+        else {
+            $detail = if ($stderr) { $stderr } elseif ($stdout) { $stdout } else { "Recorder exited with code $exitCode." }
+            $statusLabel.Text = '录音失败 / Recording failed'
+            $statusLabel.ForeColor = [Drawing.Color]::FromArgb(175, 45, 45)
+            Write-GuiLog "微信播放录音失败 / Recording failed: $detail"
+            if (-not $state.CloseWhenStopped) {
+                [void] [Windows.Forms.MessageBox]::Show(
+                    $dialogForm,
+                    $detail,
+                    '微信播放录音 / WeChat playback recording',
+                    [Windows.Forms.MessageBoxButtons]::OK,
+                    [Windows.Forms.MessageBoxIcon]::Warning
+                )
+            }
+        }
+        if ($state.CloseWhenStopped) {
+            $dialogForm.Close()
+        }
+    })
+
+    $browseButton.Add_Click({
+        $saveDialog = New-Object Windows.Forms.SaveFileDialog
+        $saveDialog.Title = '选择录音保存位置 / Select recording path'
+        $saveDialog.Filter = 'WAV audio (*.wav)|*.wav'
+        $saveDialog.DefaultExt = 'wav'
+        $saveDialog.AddExtension = $true
+        $saveDialog.FileName = [IO.Path]::GetFileName($outputText.Text)
+        $currentDirectory = [IO.Path]::GetDirectoryName($outputText.Text)
+        if ($currentDirectory -and (Test-Path -LiteralPath $currentDirectory -PathType Container)) {
+            $saveDialog.InitialDirectory = $currentDirectory
+        }
+        if ($saveDialog.ShowDialog($dialogForm) -eq [Windows.Forms.DialogResult]::OK) {
+            $outputText.Text = $saveDialog.FileName
+        }
+        $saveDialog.Dispose()
+    })
+
+    $scopeCombo.Add_SelectedIndexChanged({
+        if ($scopeCombo.SelectedIndex -eq 0) {
+            $warning.Text = '仅微信模式不会录入其他应用的声音；需要 Windows Build 20348 或更高版本。请只录制你有权保存的内容。'
+        }
+        else {
+            $warning.Text = '兼容模式会录入默认扬声器播放的全部系统声音，包括通知、音乐和其他应用；不会自动切换到此模式。'
+        }
+    })
+
+    $startButton.Add_Click({
+        try {
+            if ([string]::IsNullOrWhiteSpace($outputText.Text)) {
+                throw '请选择录音保存位置。 / Select a recording path.'
+            }
+            $outputPath = [IO.Path]::GetFullPath($outputText.Text)
+            if ([IO.Path]::GetExtension($outputPath) -ne '.wav') {
+                $outputPath += '.wav'
+                $outputText.Text = $outputPath
+            }
+            if (Test-Path -LiteralPath $outputPath -PathType Leaf) {
+                $answer = [Windows.Forms.MessageBox]::Show(
+                    $dialogForm,
+                    '文件已存在，是否覆盖？ / The file exists. Overwrite it?',
+                    '微信播放录音 / WeChat playback recording',
+                    [Windows.Forms.MessageBoxButtons]::YesNo,
+                    [Windows.Forms.MessageBoxIcon]::Question
+                )
+                if ($answer -ne [Windows.Forms.DialogResult]::Yes) {
+                    return
+                }
+            }
+            $outputDirectory = [IO.Path]::GetDirectoryName($outputPath)
+            if (-not (Test-Path -LiteralPath $outputDirectory -PathType Container)) {
+                New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+            }
+
+            $recorderArguments = 'record'
+            $captureDescription = '全部系统声音 / System audio'
+            if ($scopeCombo.SelectedIndex -eq 0) {
+                $weChatProcesses = @()
+                foreach ($processName in @('Weixin', 'WeChat')) {
+                    $weChatProcesses += @(Get-Process -Name $processName -ErrorAction SilentlyContinue)
+                }
+                $weChatProcesses = @($weChatProcesses | Sort-Object Id -Unique)
+                $targetProcess = $weChatProcesses |
+                    Sort-Object StartTime |
+                    Select-Object -First 1
+                if (-not $targetProcess) {
+                    throw '没有找到正在运行的微信。请先启动并登录微信，再开始录音。 / Start and sign in to WeChat first.'
+                }
+                $recorderArguments = "record-process $($targetProcess.Id)"
+                $captureDescription = "仅微信 PID $($targetProcess.Id) 及其子进程 / WeChat only"
+            }
+
+            $startInfo = New-Object Diagnostics.ProcessStartInfo
+            $startInfo.FileName = $script:weChatRecorder
+            $startInfo.Arguments = "$recorderArguments $(ConvertTo-NativeArgument -Value $outputPath)"
+            $startInfo.WorkingDirectory = [IO.Path]::GetDirectoryName($script:weChatRecorder)
+            $startInfo.UseShellExecute = $false
+            $startInfo.CreateNoWindow = $true
+            $startInfo.RedirectStandardInput = $true
+            $startInfo.RedirectStandardOutput = $true
+            $startInfo.RedirectStandardError = $true
+
+            $process = New-Object Diagnostics.Process
+            $process.StartInfo = $startInfo
+            if (-not $process.Start()) {
+                $process.Dispose()
+                throw 'Recorder process did not start.'
+            }
+            $process.StandardInput.AutoFlush = $true
+            $state.Process = $process
+            $state.OutputPath = $outputPath
+            $state.StopRequested = $false
+            $state.CloseWhenStopped = $false
+            $startButton.Enabled = $false
+            $stopButton.Enabled = $true
+            $outputText.Enabled = $false
+            $browseButton.Enabled = $false
+            $scopeCombo.Enabled = $false
+            $closeButton.Enabled = $false
+            $statusLabel.Text = "正在录音：$captureDescription"
+            $statusLabel.ForeColor = [Drawing.Color]::FromArgb(190, 55, 35)
+            Write-GuiLog "微信播放录音已开始 / Playback recording started: $captureDescription"
+        }
+        catch {
+            [void] [Windows.Forms.MessageBox]::Show(
+                $dialogForm,
+                $_.Exception.Message,
+                '微信播放录音 / WeChat playback recording',
+                [Windows.Forms.MessageBoxButtons]::OK,
+                [Windows.Forms.MessageBoxIcon]::Warning
+            )
+        }
+    })
+
+    $stopButton.Add_Click({
+        if ($state.Process -and -not $state.Process.HasExited -and -not $state.StopRequested) {
+            try {
+                $state.Process.StandardInput.WriteLine()
+                $state.Process.StandardInput.Flush()
+                $state.Process.StandardInput.Close()
+                $state.StopRequested = $true
+                $stopButton.Enabled = $false
+                $statusLabel.Text = '正在停止并写入 WAV 文件头 / Saving...'
+            }
+            catch {
+                $statusLabel.Text = '停止录音失败 / Could not stop recording'
+                Write-GuiLog $_.Exception.Message
+            }
+        }
+    })
+
+    $openButton.Add_Click({
+        try {
+            $path = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($outputText.Text))
+            if (-not (Test-Path -LiteralPath $path -PathType Container)) {
+                New-Item -ItemType Directory -Path $path -Force | Out-Null
+            }
+            Start-Process explorer.exe -ArgumentList (ConvertTo-NativeArgument -Value $path)
+        }
+        catch {
+            [void] [Windows.Forms.MessageBox]::Show($dialogForm, $_.Exception.Message, '微信播放录音', 'OK', 'Error')
+        }
+    })
+
+    $dialogForm.Add_FormClosing({
+        param($sender, $eventArgs)
+        if ($state.Process -and -not $state.Process.HasExited) {
+            $answer = [Windows.Forms.MessageBox]::Show(
+                $dialogForm,
+                '录音仍在进行。要停止、保存并关闭吗？ / Stop, save, and close?',
+                '微信播放录音 / WeChat playback recording',
+                [Windows.Forms.MessageBoxButtons]::YesNo,
+                [Windows.Forms.MessageBoxIcon]::Question
+            )
+            if ($answer -ne [Windows.Forms.DialogResult]::Yes) {
+                $eventArgs.Cancel = $true
+                return
+            }
+            $eventArgs.Cancel = $true
+            $state.CloseWhenStopped = $true
+            if (-not $state.StopRequested) {
+                $stopButton.PerformClick()
+            }
+        }
+    })
+
+    $recordTimer.Start()
+    try {
+        [void] $dialogForm.ShowDialog($form)
+    }
+    finally {
+        $recordTimer.Stop()
+        if ($state.Process) {
+            if (-not $state.Process.HasExited) {
+                try {
+                    if (-not $state.StopRequested) {
+                        $state.Process.StandardInput.WriteLine()
+                        $state.Process.StandardInput.Close()
+                    }
+                    if (-not $state.Process.WaitForExit(5000)) {
+                        $state.Process.Kill()
+                    }
+                }
+                catch { }
+            }
+            $state.Process.Dispose()
+        }
+        $recordTimer.Dispose()
+        $dialogForm.Dispose()
     }
 }
 
@@ -853,6 +1327,15 @@ $addFolderButton.Add_Click({
 })
 
 $weChatDatabaseButton.Add_Click({
+    $choice = Show-WeChatSourceDialog
+    if ($choice -eq 'record') {
+        Show-WeChatRecorderDialog
+        return
+    }
+    if ($choice -ne 'database') {
+        return
+    }
+
     $dialog = New-Object Windows.Forms.OpenFileDialog
     $dialog.Title = '选择已解密的微信 media_*.db / Select a decrypted WeChat media database'
     $dialog.Filter = 'WeChat media database (media_*.db)|media_*.db|SQLite database (*.db)|*.db|All files (*.*)|*.*'
@@ -868,9 +1351,21 @@ $weChatDatabaseButton.Add_Click({
     catch {
         $statusLabel.Text = '微信导入失败 / WeChat import failed'
         Write-GuiLog $_.Exception.Message
+        $errorMessage = $_.Exception.Message
+        if ($errorMessage -match 'not a readable decrypted WeChat media database') {
+            $errorMessage = @"
+所选文件很可能是微信 4.x 仍加密的官方 media_*.db，不能直接导入。
+
+请返回点击“微信语音”→“播放录音（推荐）”；如果你已经有合法取得的已解密 SQLite 副本，请选择包含 VoiceInfo 表的副本。
+
+本项目不会扫描 Weixin.exe、提取或保存密钥，也不会修改所选文件。
+
+$errorMessage
+"@
+        }
         [void] [Windows.Forms.MessageBox]::Show(
             $form,
-            $_.Exception.Message,
+            $errorMessage,
             'QQ / WeChat SILK Converter',
             [Windows.Forms.MessageBoxButtons]::OK,
             [Windows.Forms.MessageBoxIcon]::Warning
@@ -1036,7 +1531,7 @@ $form.Add_FormClosing({
     }
 })
 
-Write-GuiLog '就绪。添加 QQ/SILK 文件，或导入已解密的微信媒体库。 / Ready for QQ files or a decrypted WeChat database.'
+Write-GuiLog '就绪。添加 QQ/SILK 文件，或点击“微信语音”播放录音。 / Ready for SILK files or WeChat playback recording.'
 if ($RenderPath) {
     $renderTarget = [IO.Path]::GetFullPath($RenderPath)
     $renderDirectory = [IO.Path]::GetDirectoryName($renderTarget)

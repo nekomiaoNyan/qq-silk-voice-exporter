@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-Import and convert QQ SILK V3 voice messages on Windows, and read voice data from a **decrypted copy of a WeChat 4.x media database**. This project contains auditable source code and a reproducible build workflow only. It does not include AutoIt, UPX, installers, self-extracting archives, telemetry, or network access.
+Import and convert QQ SILK V3 voice messages on Windows. WeChat 4.x users can also record a voice while it is played, or read voice data from a **decrypted media-database copy**. This project contains auditable source code and a reproducible build workflow only. It does not include AutoIt, UPX, installers, self-extracting archives, telemetry, or network access.
 
 ## Why this project exists
 
@@ -14,7 +14,7 @@ The legacy Windows package provided by the widely used [`silk-v3-decoder`](https
 
 ## Design
 
-Files in QQ's storage commonly use the `.amr` extension even when their actual content is SILK data with Tencent's `0x02` prefix followed by `#!SILK_V3`. The native `qq-silk.exe` program decodes these files to 24 kHz, 16-bit, mono WAV. `wechat-voice.exe` uses the Windows system `winsqlite3.dll` to read `VoiceInfo.voice_data` from a user-selected, decrypted `media_*.db` copy. Readable PowerShell scripts provide the GUI, filtering, and batch conversion.
+Files in QQ's storage commonly use the `.amr` extension even when their actual content is SILK data with Tencent's `0x02` prefix followed by `#!SILK_V3`. The native `qq-silk.exe` program decodes these files to 24 kHz, 16-bit, mono WAV. `wechat-record.exe` uses Windows WASAPI process loopback to capture only audio deliberately played by WeChat and its child processes by default. `wechat-voice.exe` uses the Windows system `winsqlite3.dll` to read `VoiceInfo.voice_data` from a user-selected, decrypted `media_*.db` copy. Readable PowerShell scripts provide the GUI, filtering, and batch conversion.
 
 Unlike legacy Windows packages, this project deliberately avoids:
 
@@ -30,12 +30,13 @@ Unlike legacy Windows packages, this project deliberately avoids:
 Requirements: 64-bit Windows 10/11 and PowerShell 5.1 or later.
 
 1. Download `qq-silk-windows-x64.zip` from [Releases](https://github.com/nekomiaoNyan/qq-silk-voice-exporter/releases/latest). Regular users do not need a compiler.
-2. Extract every file and double-click the single launcher, `Start-VoiceConverter.cmd`.
-3. For QQ, click **Files** or drag files/folders into the window. For WeChat, click **WeChat DB** and select a decrypted `media_*.db` copy. Choose the options, then click **Convert**.
+2. Extract every file and double-click the single launcher, `Start-VoiceConverter.exe`. It uses Windows' no-console process mode and shows only the converter GUI; startup failures are reported in a dialog.
+3. For QQ, click **Files** or drag files/folders into the window. For WeChat, click **WeChat**, then choose **Record playback** (recommended) or **Decrypted DB** (advanced).
 
 The graphical interface supports:
 
 - selecting multiple files or adding an entire folder;
+- recording only audio played by WeChat 4.x to a local WAV by default, without reading its database;
 - importing voices from a decrypted WeChat media database with date and count filters;
 - WAV or MP3 output;
 - 8, 12, 16, 24, 32, 44.1, and 48 kHz sample rates (24 kHz is the recommended default);
@@ -68,14 +69,35 @@ Recent WeChat versions commonly store account data under:
 Documents\xwechat_files\<account>\db_storage\message\media_*.db
 ```
 
-WeChat 4.x voice payloads are records in the encrypted database's `VoiceInfo` table, not standalone files. This project currently supports a **decrypted SQLite database copy** only:
+WeChat 4.x voices are generally stored inside an encrypted database rather than as standalone files. The simplest safe method is to record a voice that you deliberately play:
+
+1. Start and sign in to WeChat, then click **WeChat** → **Record playback**.
+2. Keep the default **WeChat only** capture scope and click **Start**.
+3. Play the target voice in WeChat. When playback ends, click **Stop and save**.
+4. Windows WASAPI process loopback saves only audio rendered by the WeChat process tree. Music and notifications from other apps are excluded. Default filenames contain only a timestamp, never a contact or group name.
+
+Process-only capture requires Windows 10 Build 20348 or later (normally Windows 11 or a recent Windows 10/Server build). If WeChat has no active render stream, the result is silence. On older Windows versions, the user can explicitly select **System audio** compatibility mode; that mode includes notifications, music, and other apps, and the program **never silently falls back to it**. Playback recording is one voice at a time and passes through WeChat's playback path, but it reads only the target process ID—not WeChat files, chat databases, process memory, account data, or encryption keys.
+
+#### Decrypted database (advanced)
+
+The project also supports a **decrypted SQLite database copy**, but it does not open an official database that is still encrypted:
 
 1. Create a decrypted copy using a local, auditable method you trust. Never add the database, keys, or chat samples to this repository.
-2. Click **WeChat DB** and select the copy.
+2. Click **WeChat** → **Decrypted DB**, then select the copy.
 3. Optionally filter by date and maximum record count. Raw files use numeric names and never include contact or group names.
 4. Choose WAV/MP3 output and click **Convert**.
 
-To preserve the project's low-false-positive, auditable design, release packages do not scan `Weixin.exe` memory or obtain/store database keys. Those techniques are antivirus-sensitive and version-dependent. Selecting an encrypted official database produces a clear error and never modifies it.
+To preserve the project's low-false-positive, auditable design, release packages do not scan `Weixin.exe` memory or obtain/store database keys. **Automatic key extraction can cause a repository, its forks, or its releases to be taken down following rights-holder claims, so this project does not provide, integrate, or distribute that capability.** A [DMCA takedown notice published by GitHub on 2026-07-13](https://github.com/github/dmca/blob/master/2026/07/2026-07-13-wechat.md) says that a comparable key-extraction/decryption project and its repository network were removed. That page records the rights holder's allegations and GitHub's processing, not a court judgment. Selecting an encrypted official database produces an actionable error and never modifies it.
+
+The playback recorder can also be used directly. The first command captures only the WeChat process tree; the second captures the complete system mix for compatibility. Press Enter to stop and finalize the WAV header:
+
+```powershell
+$wechat = Get-Process Weixin | Where-Object MainWindowHandle -ne 0 | Select-Object -First 1
+.\wechat-record.exe record-process $wechat.Id 'D:\WeChat Voice\wechat-only.wav'
+
+# Compatibility only on systems without process loopback:
+.\wechat-record.exe record 'D:\WeChat Voice\wechat-voice.wav'
+```
 
 Command-line extraction:
 
@@ -207,6 +229,7 @@ This project is not affiliated with or endorsed by Tencent, QQ, Skype, Microsoft
 ## References
 
 - [Upstream silk-v3-decoder source](https://github.com/kn007/silk-v3-decoder/tree/507be6bca8ce1fb977a061481f1d79e8c610e309/silk)
+- [Microsoft: WASAPI loopback recording](https://learn.microsoft.com/windows/win32/coreaudio/loopback-recording)
 - [Microsoft: SmartScreen reputation for Windows app developers](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation)
 - [GitHub: Artifact attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations)
 - [GitHub-hosted Windows runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)

@@ -89,9 +89,13 @@ $check = Invoke-WeChatExtractor -Path $extractor -Arguments @('check', $database
 if ($check.ExitCode -ne 0) {
     $details = ($check.Lines | ForEach-Object { $_.ToString() }) -join "`n"
     throw @"
-The selected database is not a compatible decrypted WeChat media database.
+The selected file is not a readable decrypted WeChat media database.
 
-WeChat 4.x stores voice messages inside an encrypted media_*.db file. For safety and lower antivirus risk, this project does not scan Weixin.exe process memory or extract encryption keys. Select a decrypted SQLite copy that contains the VoiceInfo table.
+WeChat 4.x official media_*.db files are normally still encrypted and cannot be imported directly. Return to the main window, click WeChat, and use the recommended Record playback method. If you already have a lawfully obtained SQLite copy, select one containing the VoiceInfo table.
+
+To protect account safety, reduce antivirus false positives, and avoid platform-compliance risk, this project does not scan Weixin.exe process memory, extract or store database keys, or modify the selected file.
+
+Details:
 
 $details
 "@

@@ -29,7 +29,9 @@ if ($LASTEXITCODE -ne 0) { throw "Tests failed with exit code $LASTEXITCODE" }
 
 $executables = @(
     (Join-Path $BuildDirectory "$Configuration\qq-silk.exe"),
-    (Join-Path $BuildDirectory "$Configuration\wechat-voice.exe")
+    (Join-Path $BuildDirectory "$Configuration\Start-VoiceConverter.exe"),
+    (Join-Path $BuildDirectory "$Configuration\wechat-voice.exe"),
+    (Join-Path $BuildDirectory "$Configuration\wechat-record.exe")
 )
 foreach ($executable in $executables) {
     $hash = Get-FileHash -LiteralPath $executable -Algorithm SHA256
